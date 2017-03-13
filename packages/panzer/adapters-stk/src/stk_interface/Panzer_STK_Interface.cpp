@@ -70,6 +70,7 @@
 #include "Panzer_STK_PeriodicBC_Matcher.hpp"
 
 #include <set>
+#include <boost/icl/interval_set.hpp>
 
 using Teuchos::RCP;
 using Teuchos::rcp;
@@ -342,18 +343,27 @@ void STK_Interface::endModification()
 
     stk::CommSparse comm(bulkData_->parallel());
 
-    for (int phase=0;phase<2;++phase) {
-      for (int i=0;i<bulkData_->parallel_size();++i) {
+    typedef boost::icl::interval_set<stk::mesh::EntityId> set_t;
+    typedef set_t::interval_type ival;
+
+    set_t my_node_ids;
+    const stk::mesh::BucketVector& buckets = bulkData_->buckets(stk::topology::NODE_RANK);
+    for (size_t j=0; j<buckets.size(); ++j) {
+      const stk::mesh::Bucket& bucket = *buckets[j];
+      if ( bucket.owned() ) {
+        for (size_t k=0; k<bucket.size(); ++k) {
+          stk::mesh::EntityId id = bulkData_->identifier(bucket[k]);
+          my_node_ids.add(id);
+        }
+      }
+    }
+
+    for (int phase=0; phase<2; ++phase) {
+      for (int i=0; i<bulkData_->parallel_size(); ++i) {
         if ( i != bulkData_->parallel_rank() ) {
-          const stk::mesh::BucketVector& buckets = bulkData_->buckets(stk::topology::NODE_RANK);
-          for (size_t j=0;j<buckets.size();++j) {
-            const stk::mesh::Bucket& bucket = *buckets[j];
-            if ( bucket.owned() ) {
-              for (size_t k=0;k<bucket.size();++k) {
-                stk::mesh::EntityKey key = bulkData_->entity_key(bucket[k]);
-                comm.send_buffer(i).pack<stk::mesh::EntityKey>(key);
-              }
-            }
+          for (set_t::iterator it = my_node_ids.begin(), end = my_node_ids.end(); it != end; ++it) {
+            comm.send_buffer(i).pack<stk::mesh::EntityId>(it->lower());
+            comm.send_buffer(i).pack<stk::mesh::EntityId>(it->upper());
           }
         }
       }
@@ -366,19 +376,26 @@ void STK_Interface::endModification()
       }
     }
 
-    for (int i=0;i<bulkData_->parallel_size();++i) {
+    for (int i=0; i<bulkData_->parallel_size(); ++i) {
       if ( i != bulkData_->parallel_rank() ) {
+        set_t node_ids_on_other_procs;
+
         while(comm.recv_buffer(i).remaining()) {
-          stk::mesh::EntityKey key;
-          comm.recv_buffer(i).unpack<stk::mesh::EntityKey>(key);
-          stk::mesh::Entity node = bulkData_->get_entity(key);
-          if ( bulkData_->is_valid(node) ) {
+          stk::mesh::EntityId low, up;
+          comm.recv_buffer(i).unpack<stk::mesh::EntityId>(low);
+          comm.recv_buffer(i).unpack<stk::mesh::EntityId>(up);
+          node_ids_on_other_procs.insert(ival::closed(low, up));
+        }
+
+        set_t shared_nodes = my_node_ids & node_ids_on_other_procs;
+        for (auto interval : shared_nodes) {
+          for (stk::mesh::EntityId id = interval.lower(), end = interval.upper(); id <= end; ++id) {
+            stk::mesh::Entity node = bulkData_->get_entity(stk::topology::NODE_RANK, id);
             bulkData_->add_node_sharing(node, i);
           }
         }
       }
     }
-
 
     bulkData_->modification_end();
 
