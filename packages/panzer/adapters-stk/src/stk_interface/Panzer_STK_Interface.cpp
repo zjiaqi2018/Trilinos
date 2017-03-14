@@ -341,57 +341,121 @@ void STK_Interface::endModification()
    // find where shared entities are being created in Panzer and declare it.
    // Once this is done, the extra code below can be deleted.
 
-    stk::CommSparse comm(bulkData_->parallel());
+    stk::ParallelMachine comm = bulkData_->parallel();
+    const int psize = stk::parallel_machine_size(comm);
+    const int prank = stk::parallel_machine_rank(comm);
+    const int size_tag = 111111;
+    const int data_tag = 111011;
+    int result = MPI_SUCCESS;
 
-    typedef boost::icl::interval_set<stk::mesh::EntityId> set_t;
-    typedef set_t::interval_type ival;
+    if (psize > 1) {
+      std::vector<stk::mesh::EntityId> buffer;
 
-    set_t my_node_ids;
-    const stk::mesh::BucketVector& buckets = bulkData_->buckets(stk::topology::NODE_RANK);
-    for (size_t j=0; j<buckets.size(); ++j) {
-      const stk::mesh::Bucket& bucket = *buckets[j];
-      if ( bucket.owned() ) {
-        for (size_t k=0; k<bucket.size(); ++k) {
-          stk::mesh::EntityId id = bulkData_->identifier(bucket[k]);
-          my_node_ids.add(id);
-        }
-      }
-    }
+      typedef boost::icl::interval_set<stk::mesh::EntityId> set_t;
+      typedef set_t::interval_type ival;
 
-    for (int phase=0; phase<2; ++phase) {
-      for (int i=0; i<bulkData_->parallel_size(); ++i) {
-        if ( i != bulkData_->parallel_rank() ) {
-          for (set_t::iterator it = my_node_ids.begin(), end = my_node_ids.end(); it != end; ++it) {
-            comm.send_buffer(i).pack<stk::mesh::EntityId>(it->lower());
-            comm.send_buffer(i).pack<stk::mesh::EntityId>(it->upper());
+      set_t my_node_ids;
+      const stk::mesh::BucketVector& buckets = bulkData_->buckets(stk::topology::NODE_RANK);
+      for (size_t j=0; j<buckets.size(); ++j) {
+        const stk::mesh::Bucket& bucket = *buckets[j];
+        if ( bucket.owned() ) {
+          for (size_t k=0; k<bucket.size(); ++k) {
+            stk::mesh::EntityId id = bulkData_->identifier(bucket[k]);
+            my_node_ids.add(id);
           }
         }
       }
 
-      if (phase == 0 ) {
-        comm.allocate_buffers();
-      }
-      else {
-        comm.communicate();
-      }
-    }
+      buffer.reserve(my_node_ids.iterative_size() * 2);
 
-    for (int i=0; i<bulkData_->parallel_size(); ++i) {
-      if ( i != bulkData_->parallel_rank() ) {
-        set_t node_ids_on_other_procs;
+      for (set_t::iterator it = my_node_ids.begin(), end = my_node_ids.end(); it != end; ++it) {
+        buffer.push_back(it->lower());
+        buffer.push_back(it->upper());
+      }
 
-        while(comm.recv_buffer(i).remaining()) {
-          stk::mesh::EntityId low, up;
-          comm.recv_buffer(i).unpack<stk::mesh::EntityId>(low);
-          comm.recv_buffer(i).unpack<stk::mesh::EntityId>(up);
-          node_ids_on_other_procs.insert(ival::closed(low, up));
+      std::vector<unsigned> recv_sizes(psize, 0); // indexed by prank
+
+      {
+        std::vector<MPI_Request> request(psize , MPI_REQUEST_NULL);
+        std::vector<MPI_Status>  status(psize);
+
+        // Get amount of data coming from other procs
+        for (int i = 0; i < psize; ++i) {
+          if (i != prank) {
+            unsigned    * const p_buf = &recv_sizes[i];
+            MPI_Request * const p_req = &request[i];
+
+            result = MPI_Irecv(p_buf, 1, MPI_UINT32_T, i, size_tag, comm, p_req);
+            TEUCHOS_TEST_FOR_EXCEPTION(result != MPI_SUCCESS, std::runtime_error,
+                                       "STK_Interface: MPI_Irecv of size failed");
+          }
         }
 
-        set_t shared_nodes = my_node_ids & node_ids_on_other_procs;
-        for (auto interval : shared_nodes) {
-          for (stk::mesh::EntityId id = interval.lower(), end = interval.upper(); id <= end; ++id) {
-            stk::mesh::Entity node = bulkData_->get_entity(stk::topology::NODE_RANK, id);
-            bulkData_->add_node_sharing(node, i);
+        //barrier to make sure recvs have been posted before sends are launched:
+        MPI_Barrier(comm);
+
+        // Send the point-to-point message sizes,
+        for (int i = 0; i < psize; ++i) {
+          if (i != prank) {
+            unsigned value = buffer.size();
+            result = MPI_Send( &value , 1 , MPI_UINT32_T, i , size_tag , comm );
+            TEUCHOS_TEST_FOR_EXCEPTION(result != MPI_SUCCESS, std::runtime_error,
+                                       "STK_Interface: MPI_send of size failed");
+          }
+        }
+
+        MPI_Request * const p_request = request.data();
+        MPI_Status  * const p_status  = status.data();
+        result = MPI_Waitall( psize , p_request , p_status );
+        TEUCHOS_TEST_FOR_EXCEPTION(result != MPI_SUCCESS, std::runtime_error,
+                                   "STK_Interface: MPI_Waitall of size failed");
+      }
+
+
+
+      {
+        std::vector<MPI_Request> request(psize , MPI_REQUEST_NULL);
+        std::vector<MPI_Status>  status(psize);
+
+        // Get send data to other procs
+        for (int i = 0; i < psize; ++i) {
+          if (i != prank) {
+            stk::mesh::EntityId * const p_buf = buffer.data();
+            MPI_Request * const p_req = &request[i];
+
+            result = MPI_Isend(p_buf, buffer.size(), MPI_UINT64_T, i, data_tag, comm, p_req);
+            TEUCHOS_TEST_FOR_EXCEPTION(result != MPI_SUCCESS, std::runtime_error,
+                                       "STK_Interface: MPI_Isend of data failed");
+          }
+        }
+
+        //barrier to make sure sends have been posted before recvs are launched:
+        MPI_Barrier(comm);
+
+        // Recv the point-to-point message sizes,
+        std::vector<stk::mesh::EntityId> recv_buffer;
+        set_t node_ids_on_other_procs, shared_nodes;
+        for (int i = 0; i < psize; ++i) {
+          if (i != prank) {
+            recv_buffer.resize(recv_sizes[i]);
+            stk::mesh::EntityId *const p_buf = recv_buffer.data();
+
+            result = MPI_Recv(p_buf, recv_sizes[i], MPI_UINT64_T, i, data_tag, comm, &status[i]);
+            TEUCHOS_TEST_FOR_EXCEPTION(result != MPI_SUCCESS, std::runtime_error,
+                                       "STK_Interface: MPI_recv of data failed");
+
+            node_ids_on_other_procs.clear();
+            for (unsigned j = 0, je = recv_sizes[i]; j < je; j+=2) {
+              node_ids_on_other_procs.insert(ival::closed(p_buf[j], p_buf[j+1]));
+            }
+
+            shared_nodes = my_node_ids & node_ids_on_other_procs;
+            for (auto interval : shared_nodes) {
+              for (stk::mesh::EntityId id = interval.lower(), end = interval.upper(); id <= end; ++id) {
+                stk::mesh::Entity node = bulkData_->get_entity(stk::topology::NODE_RANK, id);
+                bulkData_->add_node_sharing(node, i);
+              }
+            }
           }
         }
       }
