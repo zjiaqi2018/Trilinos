@@ -381,7 +381,7 @@ void STK_Interface::endModification()
       for (auto result : searchResults) {
         stk::mesh::EntityId id = result.second.id();
         int proc = result.second.proc();
-        if (proc != prank) {
+        if (proc != prank && id == result.first.id()) {
           stk::mesh::Entity node = bulkData_->get_entity(stk::topology::NODE_RANK, id);
           bulkData_->add_node_sharing(node, proc);
         }
