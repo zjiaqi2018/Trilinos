@@ -363,19 +363,21 @@ void STK_Interface::endModification()
         if ( bucket->owned() ) {
           for (size_t k=0; k<bucket->size(); ++k) {
             stk::mesh::Entity node = (*bucket)[k];
-            stk::mesh::EntityId id = bulkData_->identifier(node);
-            const double* coords = getNodeCoordinates(node);
-            Ident search_id = Ident(id, prank);
-            Point point(coords[0], coords[1], getDimension() == 3 ? coords[2] : 0.0);
-            Sphere sphere(point, radius);
-            source_bbox_vector.push_back(std::make_pair(sphere, search_id));
+            if (bulkData_->state(node) == stk::mesh::Created) {
+              stk::mesh::EntityId id = bulkData_->identifier(node);
+              const double* coords = getNodeCoordinates(node);
+              Ident search_id = Ident(id, prank);
+              Point point(coords[0], coords[1], getDimension() == 3 ? coords[2] : 0.0);
+              Sphere sphere(point, radius);
+              source_bbox_vector.push_back(std::make_pair(sphere, search_id));
+            }
           }
         }
       }
 
       SearchResults searchResults;
-      stk::search::SearchMethod searchMethod = stk::search::BOOST_RTREE;
-      //stk::search::SearchMethod searchMethod = stk::search::KDTREE;
+      //stk::search::SearchMethod searchMethod = stk::search::BOOST_RTREE;
+      stk::search::SearchMethod searchMethod = stk::search::KDTREE;
       stk::search::coarse_search(source_bbox_vector, source_bbox_vector, searchMethod, comm, searchResults);
 
       for (auto result : searchResults) {
