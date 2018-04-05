@@ -2364,6 +2364,8 @@ void mult_A_B_newmatrix(
 
   // Call the actual kernel.  We'll rely on partial template specialization to call the correct one ---
   // Either the straight-up Tpetra code (SerialNode) or the KokkosKernels one (other NGP node types)
+
+  // TODO(nevans): Use threading
   KernelWrappers<Scalar,LocalOrdinal,GlobalOrdinal,Node,lo_view_t>::mult_A_B_newmatrix_kernel_wrapper(Aview,Bview,targetMapToOrigRow,targetMapToImportRow,Bcol2Ccol,Icol2Ccol,C,Cimport,label,params);
 
 }
@@ -2987,6 +2989,7 @@ void jacobi_A_B_newmatrix(
 
   // Call the actual kernel.  We'll rely on partial template specialization to call the correct one ---
   // Either the straight-up Tpetra code (SerialNode) or the KokkosKernels one (other NGP node types)
+  // TODO(nevans): Use threading
   KernelWrappers2<Scalar,LocalOrdinal,GlobalOrdinal,Node,lo_view_t>::jacobi_A_B_newmatrix_kernel_wrapper(omega,Dinv,Aview,Bview,targetMapToOrigRow,targetMapToImportRow,Bcol2Ccol,Icol2Ccol,C,Cimport,label,params);
 
 }
@@ -3509,6 +3512,7 @@ void import_and_extract_views(
   const std::string&                                            label,
   const Teuchos::RCP<Teuchos::ParameterList>&                   params)
 {
+  // TODO(nevans): No threading
   using Teuchos::Array;
   using Teuchos::ArrayView;
   using Teuchos::RCP;
