@@ -21,4 +21,6 @@
 
 #cmakedefine HAVE_TEUCHOSCORE_PTHREAD
 
+#cmakedefine HAVE_TEUCHOSCORE_QUO
+
 #endif // TEUCHOSCORE_CONFIG_H_
