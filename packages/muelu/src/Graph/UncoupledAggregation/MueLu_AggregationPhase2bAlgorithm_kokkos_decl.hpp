@@ -113,6 +113,42 @@ namespace MueLu {
     //@}
 
     std::string description() const { return "Phase 2b (expansion)"; }
+
+  private:
+
+    struct aggScore {
+      int score_;
+      int connect_;
+      int aggID_;
+
+      // constructor
+      KOKKOS_INLINE_FUNCTION
+      aggScore(int score, int connect, int aggID) : score_(score), connect_(connect), aggID_(aggID) {};
+
+      // copy operator
+      KOKKOS_INLINE_FUNCTION
+      aggScore& operator=(const aggScore rhs) {
+	score_ = rhs.score_;
+	connect_ = rhs.connect_;
+	aggID_ = rhs.aggID_;
+
+	return *this;
+      }
+
+      KOKKOS_INLINE_FUNCTION
+      bool operator< (const aggScore &rhs) const {
+	if(score_ < rhs.score_) {return true;}
+	if( (score_ == rhs.score_) && (connect_ < rhs.connect_) ) {return true;}
+	return false;
+      }
+
+      KOKKOS_INLINE_FUNCTION
+      bool operator> (const aggScore &rhs) const {
+	if(score_ > rhs.score_) {return true;}
+	if( (score_ == rhs.score_) && (connect_ > rhs.connect_) ) {return true;}
+	return false;
+      }
+    };
   };
 
 } //namespace MueLu

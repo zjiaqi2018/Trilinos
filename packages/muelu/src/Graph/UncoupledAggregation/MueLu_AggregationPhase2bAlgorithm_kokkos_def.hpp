@@ -115,7 +115,6 @@ namespace MueLu {
     int maxIters = 2;
     int maxNodesPerAggregate = params.get<int>("aggregation: max agg size");
     if(maxNodesPerAggregate == std::numeric_limits<int>::max()) {maxIters = 1;}
-    std::cout << "maxIters set to: " << maxIters << std::endl;
     for (int iter = 0; iter < maxIters; ++iter) {
       // total work = numberOfTeams * teamSize
       Kokkos::TeamPolicy<execution_space> outerPolicy(numRows, Kokkos::AUTO);
@@ -173,34 +172,27 @@ namespace MueLu {
 				      }
                                     });
 
-                                  for (int j = 0; j < numAggregatedNeighbors; j++) {
-                                    LO localNeigh = aggregatedNeighbors(j);
-				    LO neigh = neighOfINode(j);
+				  Kokkos::parallel_for(Kokkos::TeamThreadRange(teamMember, numAggregatedNeighbors),
+						       [&] (const int j) {
+							 LO localNeigh = aggregatedNeighbors(j);
+							 LO neigh = neighOfINode(j);
 
-                                      aggWeightView(vertex2AggLIDView(j)) =
-                                        aggWeightView(vertex2AggLIDView(j))
-					+ connectWeightView(neigh);
-                                  }
+							 Kokkos::atomic_add(&aggWeightView(vertex2AggLIDView(j)),
+									    connectWeightView(neigh));
+						       });
 
-                                  int bestScore   = -100000;
-                                  int bestAggId   = -1;
-                                  int bestConnect = -1;
+				  aggScore highestScore(-100000, -1, -1);
 
                                   for (int j = 0; j < numAggregatedNeighbors; j++) {
-				    LO localNeigh = aggregatedNeighbors(j);
-                                    LO neigh = neighOfINode(localNeigh);
+                                    LO neigh = neighOfINode(aggregatedNeighbors(j));
 				    int aggId = vertex2AggIdView(neigh, 0);
-				    int score = aggWeightView(vertex2AggLIDView(j))
-				      - aggPenaltiesView(aggId);
+				    aggScore currentScore(aggWeightView(vertex2AggLIDView(j))
+				  			  - aggPenaltiesView(aggId),
+				  			  connectWeightView(neigh),
+				  			  aggId);
 
-				    if (score > bestScore) {
-				      bestAggId   = aggId;
-				      bestScore   = score;
-				      bestConnect = connectWeightView(neigh);
-
-				    } else if (aggId == bestAggId
-					       && connectWeightView(neigh) > bestConnect) {
-				      bestConnect = connectWeightView(neigh);
+				    if(currentScore > highestScore) {
+				      highestScore = currentScore;
 				    }
 
 				    // Reset the weights for the next loop
@@ -211,9 +203,9 @@ namespace MueLu {
 
 				  // Do the actual aggregate update with a single thread!
 				  Kokkos::single( Kokkos::PerTeam( teamMember ), [&] () {
-				      if (bestScore >= 0) {
+				      if (highestScore.score_ >= 0) {
 				        aggStatView     (vertexIdx)    = AGGREGATED;
-				        vertex2AggIdView(vertexIdx, 0) = bestAggId;
+				        vertex2AggIdView(vertexIdx, 0) = highestScore.aggID_;
 				        procWinnerView  (vertexIdx, 0) = myRank;
 
 				        lNumNonAggregatedNodes--;
@@ -221,8 +213,8 @@ namespace MueLu {
 				        // This does not protect bestAggId's aggPenalties from being
 				        // fetched by another thread before this update happens, it just
 				        // guarantees that the update is performed correctly...
-				        Kokkos::atomic_add(&aggPenaltiesView(bestAggId), 1);
-				        connectWeightView(vertexIdx) = bestConnect
+				        Kokkos::atomic_add(&aggPenaltiesView(highestScore.aggID_), 1);
+				        connectWeightView(vertexIdx) = highestScore.connect_
 				          - penaltyConnectWeight;
 				      }
 				    });

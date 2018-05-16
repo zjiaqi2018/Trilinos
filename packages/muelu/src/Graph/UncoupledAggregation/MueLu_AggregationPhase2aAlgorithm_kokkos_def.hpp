@@ -73,6 +73,7 @@ namespace MueLu {
     Monitor m(*this, "BuildAggregates");
 
     typedef typename MueLu::LWGraph_kokkos<LO, GO, Node>::local_graph_type graph_t;
+    typedef typename graph_t::device_type::execution_space execution_space;
     typedef typename graph_t::device_type::memory_space memory_space;
 
     int minNodesPerAggregate = params.get<int>("aggregation: min agg size");
@@ -99,11 +100,15 @@ namespace MueLu {
 
     // Now we create new aggregates using root nodes in all colors other than the first color,
     // as the first color was already exhausted in Phase 1.
+    Kokkos::TeamPolicy<execution_space> outerPolicy(numRows, Kokkos::AUTO);
+    typedef typename Kokkos::TeamPolicy<execution_space>::member_type  member_type;
     for(int color = 1; color < numColors + 1; ++color) {
 
       LO tmpNumNonAggregatedNodes = 0;
-      Kokkos::parallel_reduce("Aggregation Phase 2a: loop over each individual color", numRows,
-                              KOKKOS_LAMBDA (const LO rootCandidate, LO& lNumNonAggregatedNodes) {
+      Kokkos::parallel_reduce("Aggregation Phase 2a: loop over each individual color", //numRows,
+			      outerPolicy,
+                              KOKKOS_LAMBDA (const member_type &teamMember, LO& lNumNonAggregatedNodes) {
+				const int rootCandidate = teamMember.league_rank();
                                 if(aggStatView(rootCandidate) == READY &&
                                    colorsDevice(rootCandidate) == color) {
 
@@ -135,19 +140,22 @@ namespace MueLu {
                                     LO aggIndex = Kokkos::
                                       atomic_fetch_add(&numLocalAggregates(), 1);
 
-                                    for(int j = 0; j < neighbors.length; ++j) {
-                                      LO neigh = neighbors(j);
-                                      if(neigh != rootCandidate) {
-                                        if(graph.isLocalNeighborVertex(neigh) &&
-                                           aggStatView(neigh) == READY &&
-                                           aggSize < maxNodesPerAggregate) {
-                                          aggStatView(neigh)   = AGGREGATED;
-                                          vertex2AggId(neigh, 0) = aggIndex;
-                                          procWinner(neigh, 0)   = myRank;
-                                        }
-                                      }
-                                    }
-                                    lNumNonAggregatedNodes -= aggSize;
+				    Kokkos::parallel_for(Kokkos::TeamThreadRange(teamMember, neighbors.length),
+							 [&] (const int j) {
+							   LO neigh = neighbors(j);
+							   if(neigh != rootCandidate) {
+							     if(graph.isLocalNeighborVertex(neigh) &&
+								aggStatView(neigh) == READY &&
+								aggSize < maxNodesPerAggregate) {
+							       aggStatView(neigh)   = AGGREGATED;
+							       vertex2AggId(neigh, 0) = aggIndex;
+							       procWinner(neigh, 0)   = myRank;
+							     }
+							   }
+							 });
+				    Kokkos::single( Kokkos::PerTeam( teamMember ), [&] () {
+					lNumNonAggregatedNodes -= aggSize;
+				      });
                                   }
                                 }
                               }, tmpNumNonAggregatedNodes);
