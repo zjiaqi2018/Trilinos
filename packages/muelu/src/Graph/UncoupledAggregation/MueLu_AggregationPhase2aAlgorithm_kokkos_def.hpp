@@ -102,7 +102,7 @@ namespace MueLu {
     // as the first color was already exhausted in Phase 1.
     Kokkos::TeamPolicy<execution_space> outerPolicy(numRows, Kokkos::AUTO);
     typedef typename Kokkos::TeamPolicy<execution_space>::member_type  member_type;
-    for(int color = 1; color < numColors + 1; ++color) {
+    for(int color = 2; color < numColors + 1; ++color) {
 
       LO tmpNumNonAggregatedNodes = 0;
       Kokkos::parallel_reduce("Aggregation Phase 2a: loop over each individual color", //numRows,
