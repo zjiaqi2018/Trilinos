@@ -229,7 +229,7 @@ namespace MueLu {
     LO numColors = 0;
 
     if (pL.get<std::string>("aggregation: phase 1 algorithm") == "Distance2") {
-      GetOStream(Runtime1)  << "Computing distance 2 graph coloring" << std::endl;
+      SubFactoryMonitor subM(*this, "Coloring", currentLevel);
 
       // The local CRS graph to Kokkos device views, then compute graph squared
       // Note: just using colinds_view in place of scalar_view_t type (it won't
