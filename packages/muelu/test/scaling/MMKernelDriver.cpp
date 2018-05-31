@@ -63,6 +63,25 @@
 #include "MueLu.hpp"
 #include "MueLu_TestHelpers.hpp"
 
+#define USE_DESCRIPTIVE_STATS 1
+
+#if USE_DESCRIPTIVE_STATS == 1
+#include "descriptive_stats/descriptive_stats.hpp"
+#include <chrono>
+#endif
+
+#if USE_DESCRIPTIVE_STATS == 1
+#define DescriptiveTime(x) ({\
+            auto t0 = Time::now ();\
+            x;\
+            auto t1 = Time::now ();\
+            double_secs ds = t1 - t0;\
+            if (descStats) \
+              timing_vector.push_back(std::chrono::duration_cast<ns>(ds).count ());\
+            })
+#else
+#define DescriptiveTime(x) x
+#endif
 
 
 // =========================================================================
@@ -80,6 +99,28 @@ inline void copy_view(const View1 x1, View2 x2) {
   copy_view_n(x1.extent(0),x1,x2);
 }
 
+
+template<typename ExperimentEnum>
+static inline std::string to_string (const ExperimentEnum& experiment_id) {
+  typedef ExperimentEnum Experiments;
+  switch (experiment_id) {
+    case Experiments::ViennaCL:
+      return("ViennaCL");
+    case Experiments::MKL_SPMM:
+      return ("MKL");
+    case Experiments::KK_MEM:
+      return ("KK_MEM");
+    case Experiments::KK_DENSE:
+      return ("KK_DENSE");
+    case Experiments::KK_DEFAULT:
+      return ("KK_DEFAULT");
+    case Experiments::LTG:
+      return ("LTG");
+    default:
+      return ("UNDEFINED");
+  }
+  return ("UNDEFINED");
+}
 
 
 // =========================================================================
@@ -519,6 +560,13 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
   using Teuchos::TimeMonitor;
   using std::endl;
 
+  #if USE_DESCRIPTIVE_STATS == 1
+  typedef DescriptiveStats::Time Time;
+  typedef DescriptiveStats::ns ns;
+  typedef DescriptiveStats::double_secs double_secs;
+  typedef DescriptiveStats::descriptive_stat_map_type descriptive_stat_map_type;
+  #endif
+
   bool success = false;
   bool verbose = true;
   try {
@@ -543,8 +591,12 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
     Xpetra::Parameters             xpetraParameters(clp);                          // manage parameters of Xpetra
 
     bool printTimings = true;  clp.setOption("timings", "notimings",  &printTimings, "print timings to screen");
+    bool descStats = true;     clp.setOption("descStats", "nodescStats",  &descStats, "track all timings and compute descriptive statistics (uses more memory+time)");
     int  nrepeat      = 100;   clp.setOption("nrepeat",               &nrepeat,      "repeat the experiment N times");
-    bool printFNorm    = true;  clp.setOption("fnorm", "nofnorm", &printFNorm, "Compute the Frobenius norm after each multiplication");
+    bool printFNorm    = true; clp.setOption("fnorm", "nofnorm", &printFNorm, "Compute the Frobenius norm after each multiplication");
+
+    bool printTypes    = true; clp.setOption("types", "noTypes", &printTypes, "Print the types being used");
+    bool printMats     = true; clp.setOption("printMats", "noPrintMats", &printMats, "Describe matrices");
 
     // the kernels
     bool do_viennaCL = true;
@@ -621,27 +673,27 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
     if (do_kk_default) my_experiments.push_back(Experiments::KK_DEFAULT); // KK Default
     if (do_ltg)        my_experiments.push_back(Experiments::LTG);        // LTG
 
-
-    out << "========================================================" << endl
-        << xpetraParameters
-        // << matrixParameters
-        << "========================================================" << endl
-        << "Template Types:" << endl
-        << "  Scalar:        " << Teuchos::demangleName(typeid(SC).name()) << endl
-        << "  LocalOrdinal:  " << Teuchos::demangleName(typeid(LO).name()) << endl
-        << "  GlobalOrdinal: " << Teuchos::demangleName(typeid(GO).name()) << endl
-        << "  Node:          " << Teuchos::demangleName(typeid(NO).name()) << endl
-        << "Sizes:" << endl
-        << "  Scalar:        " << sizeof(SC) << endl
-        << "  LocalOrdinal:  " << sizeof(LO) << endl
-        << "  GlobalOrdinal: " << sizeof(GO) << endl
-        << "========================================================" << endl
-        << "Matrix:        " << Teuchos::demangleName(typeid(Matrix).name()) << endl
-        << "Vector:        " << Teuchos::demangleName(typeid(Vector).name()) << endl
-        << "Hierarchy:     " << Teuchos::demangleName(typeid(Hierarchy).name()) << endl
-        << "========================================================" << endl;
-
-    Teuchos::TimeMonitor::setStackedTimer(Teuchos::null);
+    if (printTypes) {
+      out << "========================================================" << endl
+          << xpetraParameters
+          // << matrixParameters
+          << "========================================================" << endl
+          << "Template Types:" << endl
+          << "  Scalar:        " << Teuchos::demangleName(typeid(SC).name()) << endl
+          << "  LocalOrdinal:  " << Teuchos::demangleName(typeid(LO).name()) << endl
+          << "  GlobalOrdinal: " << Teuchos::demangleName(typeid(GO).name()) << endl
+          << "  Node:          " << Teuchos::demangleName(typeid(NO).name()) << endl
+          << "Sizes:" << endl
+          << "  Scalar:        " << sizeof(SC) << endl
+          << "  LocalOrdinal:  " << sizeof(LO) << endl
+          << "  GlobalOrdinal: " << sizeof(GO) << endl
+          << "========================================================" << endl
+          << "Matrix:        " << Teuchos::demangleName(typeid(Matrix).name()) << endl
+          << "Vector:        " << Teuchos::demangleName(typeid(Vector).name()) << endl
+          << "Hierarchy:     " << Teuchos::demangleName(typeid(Hierarchy).name()) << endl
+          << "========================================================" << endl;
+    }
+    //Teuchos::TimeMonitor::setStackedTimer(Teuchos::null);
 
     // At the moment, this test only runs on one MPI rank
     if(comm->getSize() != 1) exit(1);
@@ -699,19 +751,37 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
 
 
     RCP<Matrix> A = Xpetra::IO<SC,LO,GO,Node>::Read(std::string(matrixFileNameA), lib, comm);
-    RCP<Matrix> B = Xpetra::IO<SC,LO,GO,Node>::Read(std::string(matrixFileNameB), lib, comm);
-//    RCP<Matrix> C;
+    RCP<Matrix> B;
+
+    if ( matrixFileNameB == "dupe" ) {
+      *B = *A;
+      if (verbose) out << "duplicating A" << endl;
+    }
+    else if ( matrixFileNameB == "alias" ) {
+      B = A;
+      if (verbose) out << "Aliasing A" << endl;
+    }
+    else {
+      B = Xpetra::IO<SC,LO,GO,Node>::Read(std::string(matrixFileNameB), lib, comm);
+    }
 
     globalTimeMonitor = Teuchos::null;
     comm->barrier();
 
-    out << "Matrix Read complete." << endl
-        << "Matrix A:" << endl
-        << *A
-        << "========================================================" << endl
-        << "Matrix B:" << endl
-        << *B
-        << "========================================================" << endl;
+    if (verbose) { out << "Matrix Read complete." << endl; }
+
+    if (printMats) {
+      out << "Matrix A:" << endl
+          << *A
+          << "========================================================" << endl
+          << "Matrix B:" << endl
+          << *B
+          << "========================================================" << endl;
+    }
+
+    #if USE_DESCRIPTIVE_STATS == 1
+    std::map<Experiments, std::vector<double> > my_experiment_timings;
+    #endif
 
     // random source
     std::random_device rd;
@@ -737,6 +807,10 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
       for (const auto& experiment_id : my_experiments) {
         RCP<Matrix> C;
         std::string kernel_name;
+        #if USE_DESCRIPTIVE_STATS == 1
+        auto& timing_vector = my_experiment_timings[experiment_id];
+        #endif
+
         switch (experiment_id) {
         // ViennaCL
         case Experiments::ViennaCL:
@@ -744,7 +818,7 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
           C = Xpetra::MatrixFactory<SC,LO,GO,Node>::Build(A->getRowMap(),0);
           {
             TimeMonitor t(*TimeMonitor::getNewTimer("MM ViennaCL: Total"));
-            Multiply_ViennaCL(*A,*B,*C);
+            DescriptiveTime(Multiply_ViennaCL(*A,*B,*C));
           }
           #endif
           kernel_name = "ViennaCL";
@@ -755,7 +829,7 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
           C = Xpetra::MatrixFactory<SC,LO,GO,Node>::Build(A->getRowMap(),0);
           {
             TimeMonitor t(*TimeMonitor::getNewTimer("MM MKL: Total"));
-            Multiply_MKL_SPMM(*A,*B,*C);
+            DescriptiveTime(Multiply_MKL_SPMM(*A,*B,*C));
           }
           #endif
           kernel_name = "MKL";
@@ -765,7 +839,7 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
           C = Xpetra::MatrixFactory<SC,LO,GO,Node>::Build(A->getRowMap(),0);
           {
             TimeMonitor t(*TimeMonitor::getNewTimer("MM SPGEMM_KK_MEMORY: Total"));
-            Multiply_KokkosKernels(*A,*B,*C,std::string("SPGEMM_KK_MEMORY"),kk_team_work_size);
+            DescriptiveTime(Multiply_KokkosKernels(*A,*B,*C,std::string("SPGEMM_KK_MEMORY"),kk_team_work_size));
           }
           kernel_name = "KK_Memory";
           break;
@@ -774,7 +848,7 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
           C = Xpetra::MatrixFactory<SC,LO,GO,Node>::Build(A->getRowMap(),0);
           {
             TimeMonitor t(*TimeMonitor::getNewTimer("MM SPGEMM_KK_DENSE: Total"));
-            Multiply_KokkosKernels(*A,*B,*C,std::string("SPGEMM_KK_DENSE"),kk_team_work_size);
+            DescriptiveTime(Multiply_KokkosKernels(*A,*B,*C,std::string("SPGEMM_KK_DENSE"),kk_team_work_size));
           }
           kernel_name = "KK Dense";
           break;
@@ -783,7 +857,7 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
           C = Xpetra::MatrixFactory<SC,LO,GO,Node>::Build(A->getRowMap(),0);
           {
             TimeMonitor t(*TimeMonitor::getNewTimer("MM SPGEMM_KK: Total"));
-            Multiply_KokkosKernels(*A,*B,*C,std::string("SPGEMM_KK"),kk_team_work_size);
+            DescriptiveTime(Multiply_KokkosKernels(*A,*B,*C,std::string("SPGEMM_KK"),kk_team_work_size));
           }
           kernel_name = "KK Default";
           break;
@@ -792,7 +866,7 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
           C = Xpetra::MatrixFactory<SC,LO,GO,Node>::Build(A->getRowMap(),0);
           {
             TimeMonitor t(*TimeMonitor::getNewTimer("MM LTG: Total"));
-            Multiply_LTG(*A,*B,*C);
+            DescriptiveTime(Multiply_LTG(*A,*B,*C));
           }
           kernel_name = "LTG";
           break;
@@ -821,6 +895,22 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
     
     if (printTimings) {
       TimeMonitor::summarize(comm.ptr(), std::cout, false, true, false, Teuchos::Union, "", true);
+      #if USE_DESCRIPTIVE_STATS == 1
+      if (descStats ) {
+        DescriptiveStats::descriptive_stat_map_type stats;
+        const double timer_ratio = double(ns::period::num) / double(ns::period::den);
+
+        DescriptiveStats::print_descriptive_stats(out, stats, timer_ratio, "header", true, true);
+        DescriptiveStats::profile_timer (out);
+
+        for (auto& dataset : my_experiment_timings ) {
+         DescriptiveStats::descriptive_stat_map_type stats;
+         auto& measurements = dataset.second;
+         DescriptiveStats::get_descriptive_stats (measurements, measurements.size(), stats);
+         DescriptiveStats::print_descriptive_stats(out, stats, timer_ratio, to_string(dataset.first), true);
+        }
+      }
+      #endif
     }
 
     success = true;
@@ -829,9 +919,6 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
 
   return ( success ? EXIT_SUCCESS : EXIT_FAILURE );
 } //main
-
-
-
 
 //- -- --------------------------------------------------------
 #define MUELU_AUTOMATIC_TEST_ETI_NAME main_
