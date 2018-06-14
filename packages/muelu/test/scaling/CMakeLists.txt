@@ -315,7 +315,10 @@ IF (    ${PACKAGE_NAME}_ENABLE_Experimental
 
     TRIBITS_ADD_EXECUTABLE(
       MMKernelDriver
-      SOURCES MMKernelDriver.cpp descriptive_stats/descriptive_stats.cpp MMKernelDetails/TpetraExt_MatrixMatrix_ExtraKernels_modLTG.cpp
+      SOURCES MMKernelDriver.cpp
+      descriptive_stats/descriptive_stats.cpp
+      MMKernelDetails/TpetraExt_MatrixMatrix_ExtraKernels_modLTG_DOUBLE_INT_INT.cpp
+      MMKernelDetails/TpetraExt_MatrixMatrix_ExtraKernels_modLTG_DOUBLE_INT_LONGLONG.cpp
       COMM mpi
       )
 
