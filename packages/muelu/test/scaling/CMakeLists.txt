@@ -296,21 +296,29 @@ IF (${PACKAGE_NAME}_ENABLE_Tpetra AND ${PACKAGE_NAME}_ENABLE_Ifpack2 AND ${PACKA
 
 ENDIF()
 
+ENDIF() # Galeri
+
 
 # Driver to evaluate low level Matrix Matrix multiply kernels potentially using different TPLs
 # This differs from the existing Matrix Matrix driver that forms parallel random matrices for testing
 # This particular driver does not require MPI and is focused on evaluations using smaller
 # MatrixMarket matrices.
-IF (${PACKAGE_NAME}_ENABLE_Experimental AND ${PACKAGE_NAME}_ENABLE_Tpetra)
+IF (    ${PACKAGE_NAME}_ENABLE_Experimental
+    AND ${PACKAGE_NAME}_ENABLE_Tpetra
+    AND Trilinos_ENABLE_KokkosKernels
+    AND KokkosKernels_ENABLE_Experimental )
 
   # Reading a matrix saved in real format as complex does not work.
   IF (NOT ${PACKAGE_NAME}_INST_COMPLEX_INT_INT)
+    INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/descriptive_stats)
+    INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/MMKernelDetails)
+
     TRIBITS_ADD_EXECUTABLE(
       MMKernelDriver
-      SOURCES MMKernelDriver.cpp
+      SOURCES MMKernelDriver.cpp descriptive_stats/descriptive_stats.cpp MMKernelDetails/TpetraExt_MatrixMatrix_ExtraKernels_modLTG.cpp
       COMM mpi
       )
-  
+
 
     TRIBITS_ADD_TEST(
       MMKernelDriver
@@ -323,4 +331,3 @@ IF (${PACKAGE_NAME}_ENABLE_Experimental AND ${PACKAGE_NAME}_ENABLE_Tpetra)
 ENDIF()
 
 
-ENDIF() # Galeri
