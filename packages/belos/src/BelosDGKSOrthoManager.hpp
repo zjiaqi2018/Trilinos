@@ -753,6 +753,9 @@ namespace Belos {
       std::vector<ScalarType> diag(1);
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        #ifdef BELOS_MVT_SYNC_NORM_TIMER
+        MPI_Barrier(MPI_COMM_WORLD);
+        #endif
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( X, *MX, diag );
@@ -1045,6 +1048,9 @@ namespace Belos {
       //
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+      #ifdef BELOS_MVT_SYNC_NORM_TIMER
+      MPI_Barrier(MPI_COMM_WORLD);
+      #endif
       Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
       MVT::MvDot( *Xj, *MXj, oldDot );
@@ -1086,6 +1092,9 @@ namespace Belos {
         // Compute new Op-norm
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        #ifdef BELOS_MVT_SYNC_NORM_TIMER
+        MPI_Barrier(MPI_COMM_WORLD);
+        #endif
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *Xj, *MXj, newDot );
@@ -1123,6 +1132,9 @@ namespace Belos {
       // Compute Op-norm with old MXj
       if (numX > 0) {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        #ifdef BELOS_MVT_SYNC_NORM_TIMER
+        MPI_Barrier(MPI_COMM_WORLD);
+        #endif
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *Xj, *oldMXj, newDot );
@@ -1156,6 +1168,9 @@ namespace Belos {
           }
           {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+          #ifdef BELOS_MVT_SYNC_NORM_TIMER
+          MPI_Barrier(MPI_COMM_WORLD);
+          #endif
           Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
           MVT::MvDot( *tempXj, *tempMXj, oldDot );
@@ -1184,6 +1199,9 @@ namespace Belos {
           // Compute new Op-norm
           {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+          #ifdef BELOS_MVT_SYNC_NORM_TIMER
+          MPI_Barrier(MPI_COMM_WORLD);
+          #endif
           Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
           MVT::MvDot( *tempXj, *tempMXj, newDot );
@@ -1264,6 +1282,9 @@ namespace Belos {
     std::vector<ScalarType> oldDot( 1 ), newDot( 1 );
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+    #ifdef BELOS_MVT_SYNC_NORM_TIMER
+    MPI_Barrier(MPI_COMM_WORLD);
+    #endif
     Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
     MVT::MvDot( X, *MX, oldDot );
@@ -1308,6 +1329,9 @@ namespace Belos {
 
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+    #ifdef BELOS_MVT_SYNC_NORM_TIMER
+    MPI_Barrier(MPI_COMM_WORLD);
+    #endif
     Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
     MVT::MvDot( X, *MX, newDot );
@@ -1390,6 +1414,9 @@ namespace Belos {
     std::vector<ScalarType> oldDot( xc );
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+    #ifdef BELOS_MVT_SYNC_NORM_TIMER
+    MPI_Barrier(MPI_COMM_WORLD);
+    #endif
     Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
     MVT::MvDot( X, *MX, oldDot );
@@ -1475,6 +1502,9 @@ namespace Belos {
     std::vector<ScalarType> newDot(xc);
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+    #ifdef BELOS_MVT_SYNC_NORM_TIMER
+    MPI_Barrier(MPI_COMM_WORLD);
+    #endif
     Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
     MVT::MvDot( X, *MX, newDot );
@@ -1551,6 +1581,9 @@ namespace Belos {
       // Compute the initial Op-norms
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+      #ifdef BELOS_MVT_SYNC_NORM_TIMER
+      MPI_Barrier(MPI_COMM_WORLD);
+      #endif
       Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
       MVT::MvDot( *Xj, *MXj, oldDot );
@@ -1600,6 +1633,9 @@ namespace Belos {
       // Compute the Op-norms
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+      #ifdef BELOS_MVT_SYNC_NORM_TIMER
+      MPI_Barrier(MPI_COMM_WORLD);
+      #endif
       Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
       MVT::MvDot( *Xj, *MXj, newDot );
@@ -1648,6 +1684,9 @@ namespace Belos {
         // Compute the Op-norms after the correction step.
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        #ifdef BELOS_MVT_SYNC_NORM_TIMER
+        MPI_Barrier(MPI_COMM_WORLD);
+        #endif
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *Xj, *MXj, newDot );
@@ -1686,6 +1725,9 @@ namespace Belos {
         }
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        #ifdef BELOS_MVT_SYNC_NORM_TIMER
+        MPI_Barrier(MPI_COMM_WORLD);
+        #endif
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *tempXj, *tempMXj, oldDot );
@@ -1731,6 +1773,9 @@ namespace Belos {
         // Compute the Op-norms after the correction step.
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        #ifdef BELOS_MVT_SYNC_NORM_TIMER
+        MPI_Barrier(MPI_COMM_WORLD);
+        #endif
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *tempXj, *tempMXj, newDot );
