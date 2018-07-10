@@ -243,6 +243,7 @@ struct MV_Nrm2_Right_FunctorVector
   }
 };
 
+#define KOKKOS_KERNELS_USE_NORM2_THREADED_THRESHOLDING
 
 /// \brief Compute the 2-norm (or its square) of the single vector (1-D
 ///   View) X, and store the result in the 0-D View r.
@@ -252,12 +253,58 @@ V_Nrm2_Invoke (const RV& r, const XV& X, const bool& take_sqrt)
 {
   typedef typename XV::execution_space execution_space;
   const SizeType numRows = static_cast<SizeType> (X.extent(0));
-  Kokkos::RangePolicy<execution_space, SizeType> policy (0, numRows);
 
-  typedef V_Nrm2_Functor<RV, XV, SizeType> functor_type;
-  functor_type op (X, take_sqrt);
-  Kokkos::parallel_reduce (policy, op, r);
+  #ifdef KOKKOS_KERNELS_USE_NORM2_THREADED_THRESHOLDING
+  // This is broken for builds that use CUDA:
+  //  *) assumes that the memory is in the HostSpace
+  //  *) Does not avoid MKL's horrible performance w/16 threads and small size
+  // Ideal norm thresholds
+  // 1   - 8k,   no threads
+  // 8k  - 30k, 4 threads (2 threads is never competitive)
+  // 30k - 40k, 8 threads
+  // 40k - 100k, 16 threads
+  //
+  // MKL (threaded) is exceptionally bad at:
+  // 4 threads   w/5k-7k elements
+  // 16 threads  w/<35k elements
+
+  if (numRows < 8000) {
+    typedef typename XV::non_const_value_type xvalue_type;
+    typedef Kokkos::Details::InnerProductSpaceTraits<xvalue_type> IPT;
+    typedef typename IPT::mag_type value_type;
+    value_type sum = 0.0;
+
+    #pragma omp simd reduction(+:sum)
+    for (SizeType i = 0; i < numRows; ++i) {
+      const value_type tmp = IPT::norm (X(i));
+      sum += tmp * tmp;
+    }
+
+    if(take_sqrt)
+      r(0) = Kokkos::Details::ArithTraits<typename RV::non_const_value_type>::sqrt(sum);
+    else
+      r(0) = sum;
+
+    //std::cerr << r(0) << "," <<  sum << std::endl;
+  }
+  else {
+  #endif
+
+    Kokkos::RangePolicy<execution_space, SizeType> policy (0, numRows);
+
+    typedef V_Nrm2_Functor<RV, XV, SizeType> functor_type;
+    functor_type op (X, take_sqrt);
+    Kokkos::parallel_reduce (policy, op, r);
+
+  #ifdef KOKKOS_KERNELS_USE_NORM2_THREADED_THRESHOLDING
+  }
+  #endif
+
 }
+
+#ifdef KOKKOS_KERNELS_USE_NORM2_THREADED_THRESHOLDING
+#undef KOKKOS_KERNELS_USE_NORM2_THREADED_THRESHOLDING
+#endif
 
 
 /// \brief Compute the 2-norms (or their square) of the columns of the
