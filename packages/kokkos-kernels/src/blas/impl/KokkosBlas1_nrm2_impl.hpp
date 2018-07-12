@@ -255,6 +255,7 @@ V_Nrm2_Invoke (const RV& r, const XV& X, const bool& take_sqrt)
   const SizeType numRows = static_cast<SizeType> (X.extent(0));
 
   #ifdef KOKKOS_KERNELS_USE_NORM2_THREADED_THRESHOLDING
+    #pragma warn "Using thresholding for Kokkos::Norm2"
   // This is broken for builds that use CUDA:
   //  *) assumes that the memory is in the HostSpace
   //  *) Does not avoid MKL's horrible performance w/16 threads and small size
@@ -285,7 +286,6 @@ V_Nrm2_Invoke (const RV& r, const XV& X, const bool& take_sqrt)
     else
       r(0) = sum;
 
-    //std::cerr << r(0) << "," <<  sum << std::endl;
   }
   else {
   #endif

@@ -151,6 +151,8 @@ struct Dot {
   static void dot (const RV&, const XV& R, const YV& X);
 };
 
+#define KOKKOS_KERNELS_USE_DOT_THREADED_THRESHOLDING
+
 #if !defined(KOKKOSKERNELS_ETI_ONLY) || KOKKOSKERNELS_IMPL_COMPILE_LIBRARY
 //! Full specialization of Dot for single vectors (1-D Views).
 template<class RV, class XV, class YV>
@@ -188,8 +190,42 @@ struct Dot<RV, XV, YV, 1, 1, false, KOKKOSKERNELS_IMPL_COMPILE_LIBRARY>
 
     if (numElems < static_cast<size_type> (INT_MAX)) {
       typedef int index_type;
-      DotFunctor<RV,XV,YV,index_type> f(X,Y);
-      f.run("KokkosBlas::dot<1D>",R);
+
+
+      #ifdef KOKKOS_KERNELS_USE_DOT_THREADED_THRESHOLDING
+        #pragma warn "Using thresholding for Kokkos::Dot"
+      // This is broken for builds that use CUDA:
+      //  *) assumes that the memory is in the HostSpace
+      //  *) Does not avoid MKL's horrible performance w/16 threads and small size
+      // Ideal norm thresholds
+      // 1   - 8k,   no threads
+      // 8k  - 30k, 4 threads (2 threads is never competitive)
+      // 30k - 40k, 8 threads
+      // 40k - 100k, 16 threads
+      //
+      // MKL (threaded) is exceptionally bad at:
+      // 4 threads   w/5k-7k elements
+      // 16 threads  w/<35k elements
+
+      if (numElems < 8000) {
+        typedef typename RV::non_const_value_type        avalue_type;
+        typedef Kokkos::Details::InnerProductSpaceTraits<avalue_type>  IPT;
+        typedef typename IPT::dot_type                   value_type;
+        value_type sum = 0.0;
+
+        #pragma omp simd reduction(+:sum)
+        for (index_type i = 0; i < numElems; ++i) {
+          sum += IPT::dot (X(i), Y(i));
+        }
+        R(0) = sum;
+      }
+      else {
+      #endif
+        DotFunctor<RV,XV,YV,index_type> f(X,Y);
+        f.run("KokkosBlas::dot<1D>",R);
+      #ifdef KOKKOS_KERNELS_USE_DOT_THREADED_THRESHOLDING
+      }
+      #endif
     }
     else {
       typedef int64_t index_type;
