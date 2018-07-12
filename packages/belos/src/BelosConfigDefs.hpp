@@ -50,8 +50,7 @@
 #define __cplusplus
 #endif
 
-#define BELOS_MVT_SYNC_NORM_TIMER
-#define BELOS_MVT_SYNC_IP_TIMER
+#undef BELOS_MVT_USE_MvTransMv_THRESHOLD
 
 #ifndef TRILINOS_NO_CONFIG_H
 

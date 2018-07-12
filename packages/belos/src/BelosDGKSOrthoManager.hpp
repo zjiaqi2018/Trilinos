@@ -106,23 +106,18 @@ namespace Belos {
         dep_tol_( dep_tol ),
         sing_tol_( sing_tol ),
         label_( label )
+        #ifdef BELOS_TEUCHOS_TIME_MONITOR
+         // this option is only accessible via parameterList construction
+         // It seems a cleaner interface would be to remove all parameters
+         // and force the interface for config to be parameter lists. This
+         // greatly simplifies the code.
+        ,sync_before_unsynchronized_timers_ (false)
+        #endif
     {
-#ifdef BELOS_TEUCHOS_TIME_MONITOR
-      std::stringstream ss;
-      ss << label_ + ": DGKS[" << max_blk_ortho_ << "]";
-
-      std::string orthoLabel = ss.str() + ": Orthogonalization";
-      timerOrtho_ = Teuchos::TimeMonitor::getNewCounter(orthoLabel);
-
-      std::string updateLabel = ss.str() + ": Ortho (Update)";
-      timerUpdate_ = Teuchos::TimeMonitor::getNewCounter(updateLabel);
-
-      std::string normLabel = ss.str() + ": Ortho (Norm)";
-      timerNorm_ = Teuchos::TimeMonitor::getNewCounter(normLabel);
-
-      std::string ipLabel = ss.str() + ": Ortho (Inner Product)";
-      timerInnerProd_ = Teuchos::TimeMonitor::getNewCounter(ipLabel);
-#endif
+      #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        // update the timer labels.
+        setLabel(label);
+      #endif
     }
 
     //! Constructor that takes a list of parameters.
@@ -135,25 +130,16 @@ namespace Belos {
         dep_tol_ ( dep_tol_default_ ),
         sing_tol_ ( sing_tol_default_ ),
         label_( label )
+        #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        ,sync_before_unsynchronized_timers_ (false)
+        #endif
     {
       setParameterList (plist);
 
-#ifdef BELOS_TEUCHOS_TIME_MONITOR
-      std::stringstream ss;
-      ss << label_ + ": DGKS[" << max_blk_ortho_ << "]";
-
-      std::string orthoLabel = ss.str() + ": Orthogonalization";
-      timerOrtho_ = Teuchos::TimeMonitor::getNewCounter(orthoLabel);
-
-      std::string updateLabel = ss.str() + ": Ortho (Update)";
-      timerUpdate_ = Teuchos::TimeMonitor::getNewCounter(updateLabel);
-
-      std::string normLabel = ss.str() + ": Ortho (Norm)";
-      timerNorm_ = Teuchos::TimeMonitor::getNewCounter(normLabel);
-
-      std::string ipLabel = ss.str() + ": Ortho (Inner Product)";
-      timerInnerProd_ = Teuchos::TimeMonitor::getNewCounter(ipLabel);
-#endif
+      #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        // update the timer labels.
+        setLabel(label);
+      #endif
     }
 
     //! Destructor
@@ -189,11 +175,19 @@ namespace Belos {
       const MagnitudeType blkTol = params->get<MagnitudeType> ("blkTol");
       const MagnitudeType depTol = params->get<MagnitudeType> ("depTol");
       const MagnitudeType singTol = params->get<MagnitudeType> ("singTol");
+      #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        const bool sync_before_unsynchronized_timers = params->get<bool> ("sync_before_unsynchronized_timers");
+      #endif
 
       max_blk_ortho_ = maxNumOrthogPasses;
       blk_tol_ = blkTol;
       dep_tol_ = depTol;
       sing_tol_ = singTol;
+
+      #ifdef BELOS_TEUCHOS_TIME_MONITOR
+        sync_before_unsynchronized_timers_ = sync_before_unsynchronized_timers;
+      #endif
+
 
       setMyParamList (params);
     }
@@ -494,6 +488,10 @@ namespace Belos {
     std::string label_;
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
     Teuchos::RCP<Teuchos::Time> timerOrtho_, timerUpdate_, timerNorm_, timerInnerProd_;
+
+    //! If timers are enabled, synchronize before kernels that end with a barrier
+    //!  E.g., Norm and Inner Product
+    bool sync_before_unsynchronized_timers_;
 #endif // BELOS_TEUCHOS_TIME_MONITOR
 
     //! Default parameter list.
@@ -580,6 +578,7 @@ namespace Belos {
   {
     if (label != label_) {
       label_ = label;
+
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
       std::stringstream ss;
       ss << label_ + ": DGKS[" << max_blk_ortho_ << "]";
@@ -590,10 +589,10 @@ namespace Belos {
       std::string updateLabel = ss.str() + ": Ortho (Update)";
       timerUpdate_ = Teuchos::TimeMonitor::getNewCounter(updateLabel);
 
-      std::string normLabel = ss.str() + ": Ortho (Norm)";
+      std::string normLabel = ss.str() + ": Ortho (Norm" + (sync_before_unsynchronized_timers_ ? "_synchronized" : "" ) + ")";
       timerNorm_ = Teuchos::TimeMonitor::getNewCounter(normLabel);
 
-      std::string ipLabel = ss.str() + ": Ortho (Inner Product)";
+      std::string ipLabel = ss.str() + ": Ortho (Inner Product" + (sync_before_unsynchronized_timers_ ? "_synchronized" : "" ) + ")";
       timerInnerProd_ = Teuchos::TimeMonitor::getNewCounter(ipLabel);
 #endif
     }
@@ -609,9 +608,10 @@ namespace Belos {
     Teuchos::SerialDenseMatrix<int,ScalarType> xTx(rank,rank);
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-    #ifdef BELOS_MVT_SYNC_IP_TIMER
-    MPI_Barrier(MPI_COMM_WORLD);
-    #endif
+    if (sync_before_unsynchronized_timers_) {
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+
     Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
     MatOrthoManager<ScalarType,MV,OP>::innerProd(X,X,MX,xTx);
@@ -632,9 +632,10 @@ namespace Belos {
     Teuchos::SerialDenseMatrix<int,ScalarType> xTx(r2,r1);
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-    #ifdef BELOS_MVT_SYNC_IP_TIMER
-    MPI_Barrier(MPI_COMM_WORLD);
-    #endif
+    if (sync_before_unsynchronized_timers_) {
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+
     Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
     MatOrthoManager<ScalarType,MV,OP>::innerProd(X2,X1,MX1,xTx);
@@ -759,9 +760,10 @@ namespace Belos {
       std::vector<ScalarType> diag(1);
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_NORM_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( X, *MX, diag );
@@ -1054,9 +1056,10 @@ namespace Belos {
       //
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-      #ifdef BELOS_MVT_SYNC_NORM_TIMER
-      MPI_Barrier(MPI_COMM_WORLD);
-      #endif
+      if (sync_before_unsynchronized_timers_) {
+        MPI_Barrier(MPI_COMM_WORLD);
+      }
+
       Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
       MVT::MvDot( *Xj, *MXj, oldDot );
@@ -1071,9 +1074,10 @@ namespace Belos {
         // product <- prevX^T MXj
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_IP_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
         MatOrthoManager<ScalarType,MV,OP>::innerProd(*prevX,*Xj,MXj,product);
@@ -1101,9 +1105,10 @@ namespace Belos {
         // Compute new Op-norm
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_NORM_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *Xj, *MXj, newDot );
@@ -1116,9 +1121,10 @@ namespace Belos {
           Teuchos::SerialDenseMatrix<int,ScalarType> P2(numX,1);
           {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-          #ifdef BELOS_MVT_SYNC_IP_TIMER
-          MPI_Barrier(MPI_COMM_WORLD);
-          #endif
+          if (sync_before_unsynchronized_timers_) {
+            MPI_Barrier(MPI_COMM_WORLD);
+          }
+
           Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
           MatOrthoManager<ScalarType,MV,OP>::innerProd(*prevX,*Xj,MXj,P2);
@@ -1144,9 +1150,10 @@ namespace Belos {
       // Compute Op-norm with old MXj
       if (numX > 0) {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_NORM_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *Xj, *oldMXj, newDot );
@@ -1180,9 +1187,10 @@ namespace Belos {
           }
           {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-          #ifdef BELOS_MVT_SYNC_NORM_TIMER
-          MPI_Barrier(MPI_COMM_WORLD);
-          #endif
+          if (sync_before_unsynchronized_timers_) {
+            MPI_Barrier(MPI_COMM_WORLD);
+          }
+
           Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
           MVT::MvDot( *tempXj, *tempMXj, oldDot );
@@ -1191,9 +1199,10 @@ namespace Belos {
           for (int num_orth=0; num_orth<max_blk_ortho_; num_orth++){
             {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-            #ifdef BELOS_MVT_SYNC_IP_TIMER
-            MPI_Barrier(MPI_COMM_WORLD);
-            #endif
+            if (sync_before_unsynchronized_timers_) {
+              MPI_Barrier(MPI_COMM_WORLD);
+            }
+
             Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
             MatOrthoManager<ScalarType,MV,OP>::innerProd(*prevX,*tempXj,tempMXj,product);
@@ -1214,9 +1223,10 @@ namespace Belos {
           // Compute new Op-norm
           {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-          #ifdef BELOS_MVT_SYNC_NORM_TIMER
-          MPI_Barrier(MPI_COMM_WORLD);
-          #endif
+          if (sync_before_unsynchronized_timers_) {
+            MPI_Barrier(MPI_COMM_WORLD);
+          }
+
           Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
           MVT::MvDot( *tempXj, *tempMXj, newDot );
@@ -1297,9 +1307,10 @@ namespace Belos {
     std::vector<ScalarType> oldDot( 1 ), newDot( 1 );
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-    #ifdef BELOS_MVT_SYNC_NORM_TIMER
-    MPI_Barrier(MPI_COMM_WORLD);
-    #endif
+    if (sync_before_unsynchronized_timers_) {
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+
     Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
     MVT::MvDot( X, *MX, oldDot );
@@ -1311,9 +1322,10 @@ namespace Belos {
       // Multiply Q' with MX
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-      #ifdef BELOS_MVT_SYNC_IP_TIMER
-      MPI_Barrier(MPI_COMM_WORLD);
-      #endif
+      if (sync_before_unsynchronized_timers_) {
+        MPI_Barrier(MPI_COMM_WORLD);
+      }
+
       Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
       MatOrthoManager<ScalarType,MV,OP>::innerProd(*Q[i],X,MX,*C[i]);
@@ -1347,9 +1359,10 @@ namespace Belos {
 
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-    #ifdef BELOS_MVT_SYNC_NORM_TIMER
-    MPI_Barrier(MPI_COMM_WORLD);
-    #endif
+    if (sync_before_unsynchronized_timers_) {
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+
     Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
     MVT::MvDot( X, *MX, newDot );
@@ -1375,9 +1388,10 @@ namespace Belos {
         // Apply another step of classical Gram-Schmidt
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_IP_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
         MatOrthoManager<ScalarType,MV,OP>::innerProd(*Q[i],X,MX,C2);
@@ -1435,9 +1449,10 @@ namespace Belos {
     std::vector<ScalarType> oldDot( xc );
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-    #ifdef BELOS_MVT_SYNC_NORM_TIMER
-    MPI_Barrier(MPI_COMM_WORLD);
-    #endif
+    if (sync_before_unsynchronized_timers_) {
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+
     Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
     MVT::MvDot( X, *MX, oldDot );
@@ -1449,9 +1464,10 @@ namespace Belos {
       // Multiply Q' with MX
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-      #ifdef BELOS_MVT_SYNC_IP_TIMER
-      MPI_Barrier(MPI_COMM_WORLD);
-      #endif
+      if (sync_before_unsynchronized_timers_) {
+        MPI_Barrier(MPI_COMM_WORLD);
+      }
+
       Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
       MatOrthoManager<ScalarType,MV,OP>::innerProd(*Q[i],X,MX,*C[i]);
@@ -1492,9 +1508,10 @@ namespace Belos {
         // Apply another step of classical Gram-Schmidt
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_IP_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
         MatOrthoManager<ScalarType,MV,OP>::innerProd(*Q[i],X,MX,C2);
@@ -1529,9 +1546,10 @@ namespace Belos {
     std::vector<ScalarType> newDot(xc);
     {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-    #ifdef BELOS_MVT_SYNC_NORM_TIMER
-    MPI_Barrier(MPI_COMM_WORLD);
-    #endif
+    if (sync_before_unsynchronized_timers_) {
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+
     Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
     MVT::MvDot( X, *MX, newDot );
@@ -1608,9 +1626,10 @@ namespace Belos {
       // Compute the initial Op-norms
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-      #ifdef BELOS_MVT_SYNC_NORM_TIMER
-      MPI_Barrier(MPI_COMM_WORLD);
-      #endif
+      if (sync_before_unsynchronized_timers_) {
+        MPI_Barrier(MPI_COMM_WORLD);
+      }
+
       Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
       MVT::MvDot( *Xj, *MXj, oldDot );
@@ -1626,9 +1645,10 @@ namespace Belos {
         // Multiply Q' with MX
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_IP_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
         MatOrthoManager<ScalarType,MV,OP>::innerProd(*Q[i],*Xj,MXj,tempC);
@@ -1663,9 +1683,10 @@ namespace Belos {
       // Compute the Op-norms
       {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-      #ifdef BELOS_MVT_SYNC_NORM_TIMER
-      MPI_Barrier(MPI_COMM_WORLD);
-      #endif
+      if (sync_before_unsynchronized_timers_) {
+        MPI_Barrier(MPI_COMM_WORLD);
+      }
+
       Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
       MVT::MvDot( *Xj, *MXj, newDot );
@@ -1683,9 +1704,10 @@ namespace Belos {
           // Apply another step of classical Gram-Schmidt
           {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-          #ifdef BELOS_MVT_SYNC_IP_TIMER
-          MPI_Barrier(MPI_COMM_WORLD);
-          #endif
+          if (sync_before_unsynchronized_timers_) {
+            MPI_Barrier(MPI_COMM_WORLD);
+          }
+
           Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
           MatOrthoManager<ScalarType,MV,OP>::innerProd(*Q[i],*Xj,MXj,C2);
@@ -1717,9 +1739,10 @@ namespace Belos {
         // Compute the Op-norms after the correction step.
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_NORM_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *Xj, *MXj, newDot );
@@ -1758,9 +1781,10 @@ namespace Belos {
         }
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_NORM_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *tempXj, *tempMXj, oldDot );
@@ -1774,9 +1798,10 @@ namespace Belos {
             // Apply another step of classical Gram-Schmidt
             {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-            #ifdef BELOS_MVT_SYNC_IP_TIMER
-            MPI_Barrier(MPI_COMM_WORLD);
-            #endif
+            if (sync_before_unsynchronized_timers_) {
+              MPI_Barrier(MPI_COMM_WORLD);
+            }
+
             Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
             MatOrthoManager<ScalarType,MV,OP>::innerProd(*Q[i],*tempXj,tempMXj,product);
@@ -1809,9 +1834,10 @@ namespace Belos {
         // Compute the Op-norms after the correction step.
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-        #ifdef BELOS_MVT_SYNC_NORM_TIMER
-        MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+        if (sync_before_unsynchronized_timers_) {
+          MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         Teuchos::TimeMonitor normTimer( *timerNorm_ );
 #endif
         MVT::MvDot( *tempXj, *tempMXj, newDot );
@@ -1869,6 +1895,11 @@ namespace Belos {
     params->set ("singTol", DGKSOrthoManager<ScalarType, MV, OP>::sing_tol_default_, 
                  "Singular block detection threshold.");
 
+    params->set ("sync_before_unsynchronized_timers", false,
+                 "If compiled with BELOS_TEUCHOS_TIME_MONITOR=ON, "
+                 "then force a synchronization before operations that are "
+                 "timed and end with a collective.");
+
     return params;
   }
 
@@ -1888,6 +1919,8 @@ namespace Belos {
                  DGKSOrthoManager<ScalarType, MV, OP>::dep_tol_fast_);
     params->set ("singTol", 
                  DGKSOrthoManager<ScalarType, MV, OP>::sing_tol_fast_);
+
+    params->set ("sync_before_unsynchronized_timers", false);
 
     return params;
   }
