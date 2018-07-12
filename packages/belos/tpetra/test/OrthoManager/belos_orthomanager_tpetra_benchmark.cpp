@@ -139,6 +139,9 @@ main (int argc, char *argv[])
     int numBlocks = 5;
     int numTrials = 3;
 
+    // synchronize ortho timers that end with a collective
+    bool sync_before_unsynchronized_timers = false;
+
     CommandLineProcessor cmdp (false, true);
     cmdp.setOption ("benchmark", "nobenchmark", &benchmark,
         "Whether to run the benchmark.  If not, this \"test\" "
@@ -180,6 +183,10 @@ main (int argc, char *argv[])
         "Number of block(s) to benchmark (>= 1).");
     cmdp.setOption ("numTrials", &numTrials,
         "Number of trial(s) per timing run (>= 1).");
+
+    cmdp.setOption ("sync_timers", "nosync_timers", &sync_before_unsynchronized_timers,
+        "Synchronize before timers that end with a collective.");
+
 
     // Parse the command-line arguments.
     {
@@ -277,11 +284,13 @@ main (int argc, char *argv[])
     {
       std::string label (orthoManName);
       RCP<ParameterList> params =
-        parameterList (*(factory.getFastParameters (orthoManName)));
+        parameterList (*(factory.getDefaultParameters (orthoManName)));
       if (orthoManName == "Simple") {
         params->set ("Normalization", normalization);
         label = label + " (" + normalization + " normalization)";
       }
+      params->set("sync_before_unsynchronized_timers", sync_before_unsynchronized_timers);
+
       orthoMan = factory.makeOrthoManager (orthoManName, M, outMan, label, params);
     }
 
