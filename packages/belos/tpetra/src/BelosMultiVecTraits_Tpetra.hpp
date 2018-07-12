@@ -84,6 +84,10 @@ namespace Belos {
     /// (distribution over one or more parallel processes) as \c X.
     /// Its entries are not initialized and have undefined values.
     static Teuchos::RCP<MV> Clone (const MV& X, const int numVecs) {
+
+      #ifdef HAVE_BELOS_TPETRA_TIMERS
+        Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::getNewCounter ("Belos::MVT::Clone");
+      #endif
       Teuchos::RCP<MV> Y (new MV (X.getMap (), numVecs, false));
       Y->setCopyOrView (Teuchos::View);
       return Y;
@@ -92,6 +96,10 @@ namespace Belos {
     //! Create and return a deep copy of X.
     static Teuchos::RCP<MV> CloneCopy (const MV& X)
     {
+
+      #ifdef HAVE_BELOS_TPETRA_TIMERS
+        Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::getNewCounter ("Belos::MVT::CloneCopy");
+      #endif
       // Make a deep copy of X.  The one-argument copy constructor
       // does a shallow copy by default; the second argument tells it
       // to do a deep copy.
@@ -120,6 +128,11 @@ namespace Belos {
     static Teuchos::RCP<MV>
     CloneCopy (const MV& mv, const std::vector<int>& index)
     {
+
+      #ifdef HAVE_BELOS_TPETRA_TIMERS
+        Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::getNewCounter ("Belos::MVT::CloneCopyIndices");
+      #endif
+
 #ifdef HAVE_TPETRA_DEBUG
       const char fnName[] = "Belos::MultiVecTraits::CloneCopy(mv,index)";
       const size_t inNumVecs = mv.getNumVectors ();
@@ -156,6 +169,10 @@ namespace Belos {
     static Teuchos::RCP<MV>
     CloneCopy (const MV& mv, const Teuchos::Range1D& index)
     {
+      #ifdef HAVE_BELOS_TPETRA_TIMERS
+        Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::getNewCounter ("Belos::MVT::CloneCopyRange1D");
+      #endif
+
       const bool validRange = index.size() > 0 &&
         index.lbound() >= 0 &&
         index.ubound() < GetNumberVecs(mv);
@@ -185,6 +202,9 @@ namespace Belos {
     static Teuchos::RCP<MV>
     CloneViewNonConst (MV& mv, const std::vector<int>& index)
     {
+      #ifdef HAVE_BELOS_TPETRA_TIMERS
+      Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::getNewCounter ("Belos::MVT::CloneViewNonConstIndices");
+      #endif
 #ifdef HAVE_TPETRA_DEBUG
       const char fnName[] = "Belos::MultiVecTraits::CloneViewNonConst(mv,index)";
       const size_t numVecs = mv.getNumVectors ();
@@ -380,6 +400,17 @@ namespace Belos {
              const MV& B,
              MV& mv)
     {
+
+      #ifdef BELOS_MVT_USE_MvAddMv_THRESHOLD
+        // if OpenMP is defined, then attempt to throttle the thread count
+        #ifdef _OPENMP
+        const int omp_num_threads_orig = omp_get_max_threads();
+        if (A.getLocalLength () < 8000) {
+          omp_set_num_threads(1);
+        }
+        #endif
+      #endif
+
       mv.update (alpha, A, beta, B, Teuchos::ScalarTraits<Scalar>::zero ());
     }
 
@@ -406,9 +437,9 @@ namespace Belos {
 
 #ifdef HAVE_BELOS_TPETRA_TIMERS
       const std::string timerName ("Belos::MVT::MvTransMv");
-      RCP<Teuchos::Time> timer = TimeMonitor::lookupCounter (timerName);
+      RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::lookupCounter (timerName);
       if (timer.is_null ()) {
-        timer = TimeMonitor::getNewCounter (timerName);
+        timer = Teuchos::TimeMonitor::getNewCounter (timerName);
       }
       TEUCHOS_TEST_FOR_EXCEPTION(
         timer.is_null (), std::logic_error, "Belos::MvTransMv: "
@@ -457,8 +488,28 @@ namespace Belos {
       MV C_mv (LocalMap, numColsC, INIT_TO_ZERO);
 
       // multiply result into local multivector
+
+      #ifdef BELOS_MVT_USE_MvTransMv_THRESHOLD
+        // if OpenMP is defined, then attempt to throttle the thread count
+        #ifdef _OPENMP
+        const int omp_num_threads_orig = omp_get_max_threads();
+        if (A.getLocalLength () < 4000) {
+          omp_set_num_threads(1);
+        }
+        #endif
+      #endif
+
       C_mv.multiply (Teuchos::CONJ_TRANS, Teuchos::NO_TRANS, alpha, A, B,
                      Teuchos::ScalarTraits<Scalar>::zero ());
+
+      #ifdef BELOS_MVT_USE_MvTransMv_THRESHOLD
+        // if OpenMP is defined, revert the throttle applied above
+        #ifdef _OPENMP
+        if (A.getLocalLength () < 4000) {
+          omp_set_num_threads(omp_num_threads_orig);
+        }
+        #endif
+      #endif
 
       // create arrayview encapsulating the Teuchos::SerialDenseMatrix
       Teuchos::ArrayView<Scalar> C_view (C.values (), strideC * numColsC);
