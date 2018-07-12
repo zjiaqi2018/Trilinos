@@ -1022,6 +1022,9 @@ namespace Belos {
           // product <- prevX^T MXj
           {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+            #ifdef BELOS_MVT_SYNC_IP_TIMER
+            MPI_Barrier(MPI_COMM_WORLD);
+            #endif
             Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
             MatOrthoManager<ScalarType,MV,OP>::innerProd(*prevX,*Xj,MXj,P2);
@@ -1116,6 +1119,9 @@ namespace Belos {
             for (int num_orth=0; num_orth<max_ortho_steps_; num_orth++){
               {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+                #ifdef BELOS_MVT_SYNC_IP_TIMER
+                MPI_Barrier(MPI_COMM_WORLD);
+                #endif
                 Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
                 MatOrthoManager<ScalarType,MV,OP>::innerProd(*prevX,*tempXj,tempMXj,P2);
@@ -1241,6 +1247,9 @@ namespace Belos {
         // Multiply Q' with MX
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+          #ifdef BELOS_MVT_SYNC_IP_TIMER
+          MPI_Barrier(MPI_COMM_WORLD);
+          #endif
           Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
           MatOrthoManager<ScalarType,MV,OP>::innerProd(*tempQ,X,MX,tempC);
@@ -1286,6 +1295,9 @@ namespace Belos {
           // Apply another step of modified Gram-Schmidt
           {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+            #ifdef BELOS_MVT_SYNC_IP_TIMER
+            MPI_Barrier(MPI_COMM_WORLD);
+            #endif
             Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
             MatOrthoManager<ScalarType,MV,OP>::innerProd( *tempQ, X, MX, tempC2 );
@@ -1366,6 +1378,9 @@ namespace Belos {
         // Multiply Q' with MX
         {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+          #ifdef BELOS_MVT_SYNC_IP_TIMER
+          MPI_Barrier(MPI_COMM_WORLD);
+          #endif
           Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
           MatOrthoManager<ScalarType,MV,OP>::innerProd( *tempQ, X, MX, tempC);
@@ -1410,6 +1425,9 @@ namespace Belos {
           // Apply another step of modified Gram-Schmidt
           {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
+            #ifdef BELOS_MVT_SYNC_IP_TIMER
+            MPI_Barrier(MPI_COMM_WORLD);
+            #endif
             Teuchos::TimeMonitor innerProdTimer( *timerInnerProd_ );
 #endif
             MatOrthoManager<ScalarType,MV,OP>::innerProd( *tempQ, X, MX, tempC2 );
