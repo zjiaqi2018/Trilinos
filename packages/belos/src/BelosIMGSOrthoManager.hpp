@@ -512,6 +512,12 @@ namespace Belos {
                        Teuchos::Array<Teuchos::RCP<Teuchos::SerialDenseMatrix<int,ScalarType> > > C,
                        Teuchos::RCP<Teuchos::SerialDenseMatrix<int,ScalarType> > B,
                        Teuchos::ArrayView<Teuchos::RCP<const MV> > QQ) const;
+
+#ifdef BELOS_TEUCHOS_TIME_MONITOR
+   //! setup teuchos timers
+   void buildTeuchosTimers();
+#endif
+
   };
 
   // Set static variables.
@@ -550,23 +556,34 @@ namespace Belos {
     if (label != label_) {
       label_ = label;
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
-      std::stringstream ss;
-      ss << label_ + ": IMGS[" << max_ortho_steps_ << "]";
-
-      std::string orthoLabel = ss.str() + ": Orthogonalization";
-      timerOrtho_ = Teuchos::TimeMonitor::getNewCounter(orthoLabel);
-
-      std::string updateLabel = ss.str() + ": Ortho (Update)";
-      timerUpdate_ = Teuchos::TimeMonitor::getNewCounter(updateLabel);
-
-      std::string normLabel = ss.str() + ": Ortho (Norm" + (sync_before_unsynchronized_timers_ ? "_synchronized" : "" ) + ")";
-      timerNorm_ = Teuchos::TimeMonitor::getNewCounter(normLabel);
-
-      std::string ipLabel = ss.str() + ": Ortho (Inner Product" + (sync_before_unsynchronized_timers_ ? "_synchronized" : "" ) + ")";
-      timerInnerProd_ = Teuchos::TimeMonitor::getNewCounter(ipLabel);
+      buildTeuchosTimers ();
 #endif
     }
   }
+
+#ifdef BELOS_TEUCHOS_TIME_MONITOR
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Set the label for this orthogonalization manager and create new timers if it's changed
+  template<class ScalarType, class MV, class OP>
+  void IMGSOrthoManager<ScalarType,MV,OP>::buildTeuchosTimers()
+  {
+    std::stringstream ss;
+    ss << label_ + ": IMGS[" << max_ortho_steps_ << "]";
+
+    std::string orthoLabel = ss.str() + ": Orthogonalization";
+    timerOrtho_ = Teuchos::TimeMonitor::getNewCounter(orthoLabel);
+
+    std::string updateLabel = ss.str() + ": Ortho (Update)";
+    timerUpdate_ = Teuchos::TimeMonitor::getNewCounter(updateLabel);
+
+    std::string normLabel = ss.str() + ": Ortho (Norm" + (sync_before_unsynchronized_timers_ ? "_synchronized" : "" ) + ")";
+    timerNorm_ = Teuchos::TimeMonitor::getNewCounter(normLabel);
+
+    std::string ipLabel = ss.str() + ": Ortho (Inner Product" + (sync_before_unsynchronized_timers_ ? "_synchronized" : "" ) + ")";
+    timerInnerProd_ = Teuchos::TimeMonitor::getNewCounter(ipLabel);
+
+  }
+#endif
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Compute the distance from orthonormality
