@@ -597,7 +597,7 @@ namespace Belos {
   void DGKSOrthoManager<ScalarType,MV,OP>::buildTeuchosTimers()
   {
     std::stringstream ss;
-    ss << label_ + ": DGKS[" << max_ortho_steps_ << "]";
+    ss << label_ + ": DGKS[" << max_blk_ortho_ << "]";
 
     std::string orthoLabel = ss.str() + ": Orthogonalization";
     timerOrtho_ = Teuchos::TimeMonitor::getNewCounter(orthoLabel);
