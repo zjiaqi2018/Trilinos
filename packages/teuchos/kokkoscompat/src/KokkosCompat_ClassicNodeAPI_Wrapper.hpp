@@ -27,6 +27,13 @@ template<class ExecutionSpace,
          class MemorySpace = typename ExecutionSpace::memory_space>
 class KokkosDeviceWrapperNode {
 public:
+  /// \brief Tag this Node as a Node type, so we can use the "is_node"
+  ///   concept (to be defined in Tpetra).
+  ///
+  /// \warning DO NOT USE this typedef.  It exists purely to help
+  ///   Tpetra migrate away from Node types.
+  using node = KokkosDeviceWrapperNode<ExecutionSpace, MemorySpace>;
+
   //! The Node's Kokkos execution space.
   typedef ExecutionSpace execution_space;
   //! The Node's Kokkos memory space.
@@ -86,4 +93,5 @@ public:
 
 } // namespace Compat
 } // namespace Kokkos
-#endif
+
+#endif // KOKKOSCOMPAT_CLASSICNODEAPI_WRAPPER_HPP
