@@ -46,6 +46,7 @@
 #include "Tpetra_Details_demangle.hpp"
 #include "Tpetra_Details_DefaultTypes.hpp"
 #include <complex>
+#include <ostream>
 #include <typeinfo>
 
 namespace { // (anonymous)
@@ -62,6 +63,10 @@ namespace { // (anonymous)
       static_assert (std::is_integral<LO>::value, "LO must be an integer");
       static_assert (std::is_integral<GO>::value, "GO must be an integer");
       static_assert (Tpetra::Details::is_node<NT>::value, "NT must be a Node type");
+
+      using local_ordinal_type = LO;
+      using global_ordinal_type = GO;
+      using node_type = NT;
     };
 
     template<class SC, class LO, class GO, class NT>
@@ -70,6 +75,11 @@ namespace { // (anonymous)
       static_assert (std::is_integral<LO>::value, "LO must be an integer");
       static_assert (std::is_integral<GO>::value, "GO must be an integer");
       static_assert (Tpetra::Details::is_node<NT>::value, "NT must be a Node type");
+
+      using scalar_type = SC;
+      using local_ordinal_type = LO;
+      using global_ordinal_type = GO;
+      using node_type = NT;
     };
 
   } // namespace Classes
@@ -82,6 +92,12 @@ namespace { // (anonymous)
     using node_type = ::Tpetra::Details::DefaultTypes::node_type;
   };
 
+  //
+  // Define the aliases, as intended for all Tpetra classes.  If
+  // anything is wrong with the alias system, these aliases will
+  // likely give a build error.
+  //
+
   template<class ... Args>
   using SampleThreeArgumentClass =
     typename ::Tpetra::Details::ThreeArgAlias<Classes::SampleThreeArgumentClass, Defaults, Args...>::type;
@@ -89,6 +105,162 @@ namespace { // (anonymous)
   template<class ... Args>
   using SampleFourArgumentClass =
     typename ::Tpetra::Details::FourArgAlias<Classes::SampleFourArgumentClass, Defaults, Args...>::type;
+
+  //
+  // Classes that we will use below for partial specialization tests.
+  //
+
+  struct Foo {
+    void print (std::ostream& out) {
+      out << "Foo" << std::endl;
+    }
+  };
+
+  template<class LO, class GO, class NT>
+  struct Bar {};
+
+  template<class T>
+  struct TestTraits {};
+
+  template<>
+  struct TestTraits<Foo> {
+    static void print (std::ostream& out, Foo& x) {
+      x.print (out);
+    }
+  };
+
+  template<class LO, class GO, class NT>
+  struct TestTraits<Bar<LO, GO, NT> > {
+    static void print (std::ostream& out, Bar<LO, GO, NT>& ) {
+      using Tpetra::Details::demangle;
+      out << "Bar<" << typeid (LO).name () << ", "
+          << typeid (GO).name () << ", "
+          << typeid (NT).name () << ">" << std::endl;
+    }
+  };
+
+  // This does not build.  With GCC 4.9.3, I get errors like this:
+  //
+  // .../Aliases.cpp:134:10: error: template parameters not deducible in partial specialization:
+  // struct TestTraits<SampleThreeArgumentClass<LO, GO, NT> > {
+  //        ^
+  // .../Aliases.cpp:134:10: note:         ‘LO’
+  // .../Aliases.cpp:134:10: note:         ‘GO’
+  // .../Aliases.cpp:134:10: note:         ‘NT’
+#if 0
+  template<class LO, class GO, class NT>
+  struct TestTraits<SampleThreeArgumentClass<LO, GO, NT> > {
+    static void print (std::ostream& out, SampleThreeArgumentClass<LO, GO, NT>& ) {
+      using Tpetra::Details::demangle;
+      out << "SampleThreeArgumentClass<" << typeid (LO).name () << ", "
+          << typeid (GO).name () << ", "
+          << typeid (NT).name () << ">" << std::endl;
+    }
+  };
+#endif
+
+  // This does not build.
+#if 0
+  template<class LO, class GO, class NT>
+  struct Hack1 {
+    using type = SampleThreeArgumentClass<LO, GO, NT>;
+  };
+
+  template<class LO, class GO, class NT>
+  struct TestTraits<typename Hack1<LO, GO, NT>::type> {
+    static void print (std::ostream& out, SampleThreeArgumentClass<LO, GO, NT>& ) {
+      using Tpetra::Details::demangle;
+      out << "SampleThreeArgumentClass<" << typeid (LO).name () << ", "
+          << typeid (GO).name () << ", "
+          << typeid (NT).name () << ">" << std::endl;
+    }
+  };
+#endif
+
+#if 0
+  // This does not build.
+  template<class LO, class GO, class NT>
+  struct Hack2 {
+    using type = Classes::SampleThreeArgumentClass<LO, GO, NT>;
+  };
+
+  template<class LO, class GO, class NT>
+  struct TestTraits<typename Hack2<LO, GO, NT>::type> {
+    static void print (std::ostream& out, SampleThreeArgumentClass<LO, GO, NT>& ) {
+      using Tpetra::Details::demangle;
+      out << "SampleThreeArgumentClass<" << typeid (LO).name () << ", "
+          << typeid (GO).name () << ", "
+          << typeid (NT).name () << ">" << std::endl;
+    }
+  };
+#endif
+
+  template<class LO, class GO, class NT>
+  struct Baz {};
+
+  // This does not build, and gives the same error message as above.
+  // Note the lack of parameter packs (Args...)  or template aliases.
+  // Hack3 simulates a template alias in C++98.
+#if 0
+  template<class LO, class GO, class NT>
+  struct Hack3 {
+    typedef Baz<LO, GO, NT> type;
+  };
+
+  template<class LO, class GO, class NT>
+  struct TestTraits<typename Hack3<LO, GO, NT>::type> {
+    static void print (std::ostream& out, Baz<LO, GO, NT>& ) {
+      using Tpetra::Details::demangle;
+      out << "Baz<" << typeid (LO).name () << ", "
+          << typeid (GO).name () << ", "
+          << typeid (NT).name () << ">" << std::endl;
+    }
+  };
+#endif
+
+  // This does build.
+  template<class LO, class GO, class NT>
+  struct TestTraits<Baz<LO, GO, NT> > {
+    static void print (std::ostream& out, Baz<LO, GO, NT>& ) {
+      using Tpetra::Details::demangle;
+      out << "Baz<" << typeid (LO).name () << ", "
+          << typeid (GO).name () << ", "
+          << typeid (NT).name () << ">" << std::endl;
+    }
+  };
+
+  // This does build.
+  template<class LO, class GO, class NT>
+  struct TestTraits<Classes::SampleThreeArgumentClass<LO, GO, NT> > {
+    static void print (std::ostream& out, SampleThreeArgumentClass<LO, GO, NT>& ) {
+      using Tpetra::Details::demangle;
+      out << "SampleThreeArgumentClass<" << typeid (LO).name () << ", "
+          << typeid (GO).name () << ", "
+          << typeid (NT).name () << ">" << std::endl;
+    }
+  };
+
+  // This does not build.  With GCC 4.9.3, I get errors like this:
+  //
+  // .../Aliases.cpp:174:10: error: template parameters not deducible in partial specialization:
+  // struct TestTraits<SampleThreeArgumentClass<Args...> > {
+  //        ^
+  // .../Aliases.cpp:174:10: note:         ‘Args’
+#if 0
+  template<class ... Args>
+  struct TestTraits<SampleThreeArgumentClass<Args...> > {
+    static void print (std::ostream& out, SampleThreeArgumentClass<Args...>& ) {
+      using Tpetra::Details::demangle;
+      using the_type = SampleThreeArgumentClass<Args...>;
+      using LO = typename the_type::local_ordinal_type;
+      using GO = typename the_type::global_ordinal_type;
+      using NT = typename the_type::node_type;
+      out << "SampleThreeArgumentClass<" << typeid (LO).name () << ", "
+          << typeid (GO).name () << ", "
+          << typeid (NT).name () << ">" << std::endl;
+    }
+  };
+#endif
 
   TEUCHOS_UNIT_TEST( TpetraUtils, Aliases )
   {
