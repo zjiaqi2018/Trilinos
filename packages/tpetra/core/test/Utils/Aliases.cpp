@@ -74,13 +74,21 @@ namespace { // (anonymous)
 
   } // namespace Classes
 
+  // Default values of template parameters.
+  struct Defaults {
+    using scalar_type = ::Tpetra::Details::DefaultTypes::scalar_type;
+    using local_ordinal_type = ::Tpetra::Details::DefaultTypes::local_ordinal_type;
+    using global_ordinal_type = ::Tpetra::Details::DefaultTypes::global_ordinal_type;
+    using node_type = ::Tpetra::Details::DefaultTypes::node_type;
+  };
+
   template<class ... Args>
   using SampleThreeArgumentClass =
-    typename ::Tpetra::Details::ThreeArgAlias<Classes::SampleThreeArgumentClass, Args...>::type;
+    typename ::Tpetra::Details::ThreeArgAlias<Classes::SampleThreeArgumentClass, Defaults, Args...>::type;
 
   template<class ... Args>
   using SampleFourArgumentClass =
-    typename ::Tpetra::Details::FourArgAlias<Classes::SampleFourArgumentClass, Args...>::type;
+    typename ::Tpetra::Details::FourArgAlias<Classes::SampleFourArgumentClass, Defaults, Args...>::type;
 
   TEUCHOS_UNIT_TEST( TpetraUtils, Aliases )
   {

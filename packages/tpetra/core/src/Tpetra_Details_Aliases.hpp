@@ -42,9 +42,7 @@
 #ifndef TPETRA_DETAILS_ALIASES_HPP
 #define TPETRA_DETAILS_ALIASES_HPP
 
-#include "Tpetra_Details_demangle.hpp"
 #include "Tpetra_Details_Concepts.hpp"
-#include "Tpetra_Details_DefaultTypes.hpp"
 #include <type_traits>
 
 namespace Tpetra {
@@ -53,21 +51,24 @@ namespace Details {
 // Recurse on the list of template parameters Args... to determine
 // local_ordinal_type, global_ordinal_type, and node_type.
 template<class Traits,
+         class Defaults,
          class ... Args>
 struct ThreeArgTraitsImpl;
 
 // Recurse on the list of template parameters Args... to determine
 // scalar_type, local_ordinal_type, global_ordinal_type, and node_type.
 template<class Traits,
+         class Defaults,
          class ... Args>
 struct FourArgTraitsImpl;
 
 // Base case of the recursion: use Traits (some struct with typedefs)
 // to get local_ordinal_type, global_ordinal_type, and node_type.  Any
 // missing typedefs (represented by Traits having void for that
-// typedef) get filled in with defaults.
-template<class Traits>
-struct ThreeArgTraitsImpl<Traits> {
+// typedef) get filled in with defaults from the second template
+// parameter.
+template<class Traits, class Defaults>
+struct ThreeArgTraitsImpl<Traits, Defaults> {
 private:
   static constexpr bool have_lo =
     ! std::is_same<typename Traits::local_ordinal_type, void>::value;
@@ -88,19 +89,19 @@ public:
     typename std::conditional<
       have_lo,
       typename Traits::local_ordinal_type,
-      ::Tpetra::Details::DefaultTypes::local_ordinal_type
+      typename Defaults::local_ordinal_type
     >::type;
   using global_ordinal_type =
     typename std::conditional<
       have_go,
       typename Traits::global_ordinal_type,
-      ::Tpetra::Details::DefaultTypes::global_ordinal_type
+      typename Defaults::global_ordinal_type
     >::type;
   using node_type =
     typename std::conditional<
       have_nt,
       typename Traits::node_type,
-      ::Tpetra::Details::DefaultTypes::node_type
+      typename Defaults::node_type
     >::type;
 
   static_assert (! have_lo || std::is_integral<local_ordinal_type>::value,
@@ -114,9 +115,10 @@ public:
 // Base case of the recursion: use Traits (some struct with typedefs)
 // to get scalar_type, local_ordinal_type, global_ordinal_type, and
 // node_type.  Any missing typedefs (represented by Traits having void
-// for that typedef) get filled in with defaults.
-template<class Traits>
-struct FourArgTraitsImpl<Traits> {
+// for that typedef) get filled in with defaults from the second
+// template parameter.
+template<class Traits, class Defaults>
+struct FourArgTraitsImpl<Traits, Defaults> {
 private:
   static constexpr bool have_sc =
     ! std::is_same<typename Traits::scalar_type, void>::value;
@@ -132,33 +134,34 @@ public:
     typename std::conditional<
       have_sc,
       typename Traits::scalar_type,
-      ::Tpetra::Details::DefaultTypes::scalar_type
+      typename Defaults::scalar_type
     >::type;
   using local_ordinal_type =
     typename std::conditional<
       have_lo,
       typename Traits::local_ordinal_type,
-      ::Tpetra::Details::DefaultTypes::local_ordinal_type
+      typename Defaults::local_ordinal_type
     >::type;
   using global_ordinal_type =
     typename std::conditional<
       have_go,
       typename Traits::global_ordinal_type,
-      ::Tpetra::Details::DefaultTypes::global_ordinal_type
+      typename Defaults::global_ordinal_type
     >::type;
   using node_type =
     typename std::conditional<
       have_nt,
       typename Traits::node_type,
-      ::Tpetra::Details::DefaultTypes::node_type
+      typename Defaults::node_type
     >::type;
 };
 
 // Recurse on the template parameter list.
 template<class Traits,
+         class Defaults,
          class First,
          class ... Rest>
-struct ThreeArgTraitsImpl<Traits, First, Rest...> {
+struct ThreeArgTraitsImpl<Traits, Defaults, First, Rest...> {
 private:
   static_assert (sizeof... (Rest) <= 2, "Tpetra classes like Map and CrsGraph "
                  "may have no more than three template parameters.");
@@ -229,7 +232,7 @@ private:
 
   // Recurse on the Rest of the list, using MyTraits as the Traits
   // template parameter.
-  using rest_traits = ThreeArgTraitsImpl<MyTraits, Rest...>;
+  using rest_traits = ThreeArgTraitsImpl<MyTraits, Defaults, Rest...>;
 
 public:
   using local_ordinal_type = typename rest_traits::local_ordinal_type;
@@ -239,9 +242,10 @@ public:
 
 // Recurse on the template parameter list.
 template<class Traits,
+         class Defaults,
          class First,
          class ... Rest>
-struct FourArgTraitsImpl<Traits, First, Rest...> {
+struct FourArgTraitsImpl<Traits, Defaults, First, Rest...> {
 private:
   static_assert (sizeof... (Rest) <= 4, "Tpetra classes like MultiVector "
                  "may have no more than four template parameters.");
@@ -322,7 +326,7 @@ private:
 
   // Recurse on the Rest of the list, using MyTraits as the Traits
   // template parameter.
-  using rest_traits = FourArgTraitsImpl<MyTraits, Rest...>;
+  using rest_traits = FourArgTraitsImpl<MyTraits, Defaults, Rest...>;
 
 public:
   using scalar_type = typename rest_traits::scalar_type;
@@ -333,8 +337,9 @@ public:
 
 // Use ThreeArgTraitsImpl to translate a list of template parameters
 // Args... into local_ordinal_type, global_ordinal_type, and node_type
-// typedefs.
-template<class ... Args>
+// typedefs.  Get defaults for these three types from the first
+// template parameter.
+template<class Defaults, class ... Args>
 struct ThreeArgTraits {
 private:
   // ThreeArgTraitsImpl starts with a struct whose typedefs are all void.
@@ -346,17 +351,18 @@ private:
 
 public:
   using local_ordinal_type =
-    typename ThreeArgTraitsImpl<MyTraits, Args...>::local_ordinal_type;
+    typename ThreeArgTraitsImpl<MyTraits, Defaults, Args...>::local_ordinal_type;
   using global_ordinal_type =
-    typename ThreeArgTraitsImpl<MyTraits, Args...>::global_ordinal_type;
+    typename ThreeArgTraitsImpl<MyTraits, Defaults, Args...>::global_ordinal_type;
   using node_type =
-    typename ThreeArgTraitsImpl<MyTraits, Args...>::node_type;
+    typename ThreeArgTraitsImpl<MyTraits, Defaults, Args...>::node_type;
 };
 
 // Use FourArgTraitsImpl to translate a list of template parameters
 // Args... into scalar_type, local_ordinal_type, global_ordinal_type,
-// and node_type typedefs.
-template<class ... Args>
+// and node_type typedefs.  Get defaults for these four types from
+// the first template parameter.
+template<class Defaults, class ... Args>
 struct FourArgTraits {
 private:
   // FourArgTraitsImpl starts with a struct whose typedefs are all void.
@@ -369,30 +375,32 @@ private:
 
 public:
   using scalar_type =
-    typename FourArgTraitsImpl<MyTraits, Args...>::scalar_type;
+    typename FourArgTraitsImpl<MyTraits, Defaults, Args...>::scalar_type;
   using local_ordinal_type =
-    typename FourArgTraitsImpl<MyTraits, Args...>::local_ordinal_type;
+    typename FourArgTraitsImpl<MyTraits, Defaults, Args...>::local_ordinal_type;
   using global_ordinal_type =
-    typename FourArgTraitsImpl<MyTraits, Args...>::global_ordinal_type;
+    typename FourArgTraitsImpl<MyTraits, Defaults, Args...>::global_ordinal_type;
   using node_type =
-    typename FourArgTraitsImpl<MyTraits, Args...>::node_type;
+    typename FourArgTraitsImpl<MyTraits, Defaults, Args...>::node_type;
 };
 
 // Implementation detail.  Tpetra will use ThreeArgAlias to get the
 // Classes::${CLASS} specialization corresponding to the template
 // parameters of ${CLASS}.  First template parameter will be
-// Classes::${CLASS}.  Remaining template parameter(s) (if any) Args
-// are exactly the template parameters of ${CLASS}.
+// Classes::${CLASS}.  Get defaults for those template parameters from
+// Defaults.  Remaining template parameter(s) (if any) Args are
+// exactly the template parameters of ${CLASS}.
 template<template <class LO, class GO, class NT> class Object,
+         class Defaults,
          class ... Args>
 struct ThreeArgAlias {
 private:
   static_assert (sizeof... (Args) <= 3, "Users must supply no more than 3 "
                  "template parameters for Tpetra classes like Map "
                  "and CrsGraph.");
-  using local_ordinal_type = typename ThreeArgTraits<Args...>::local_ordinal_type;
-  using global_ordinal_type = typename ThreeArgTraits<Args...>::global_ordinal_type;
-  using node_type = typename ThreeArgTraits<Args...>::node_type;
+  using local_ordinal_type = typename ThreeArgTraits<Defaults, Args...>::local_ordinal_type;
+  using global_ordinal_type = typename ThreeArgTraits<Defaults, Args...>::global_ordinal_type;
+  using node_type = typename ThreeArgTraits<Defaults, Args...>::node_type;
 public:
   using type = Object<local_ordinal_type, global_ordinal_type, node_type>;
 };
@@ -400,20 +408,22 @@ public:
 // Implementation detail.  Tpetra will use FourArgAlias to get the
 // Classes::MultiVector (or other Tpetra class with four template
 // parameters) specialization corresponding to the template parameters
-// of Map.  First template parameter will be Classes::${CLASSES}.
-// Remaining template parameter(s) (if any) Args are exactly the
-// template parameters of ${CLASSES}.
+// of Map.  First template parameter will be Classes::${CLASSES}.  Get
+// defaults for those template parameters from Defaults.  Remaining
+// template parameter(s) (if any) Args are exactly the template
+// parameters of ${CLASSES}.
 template<template <class SC, class LO, class GO, class NT> class Object,
+         class Defaults,
          class ... Args>
 struct FourArgAlias {
 private:
   static_assert (sizeof... (Args) <= 4, "Users must supply no more than 4 "
                  "template parameters for Tpetra classes like MultiVector "
                  "and CrsMatrix.");
-  using scalar_type = typename FourArgTraits<Args...>::scalar_type;
-  using local_ordinal_type = typename FourArgTraits<Args...>::local_ordinal_type;
-  using global_ordinal_type = typename FourArgTraits<Args...>::global_ordinal_type;
-  using node_type = typename FourArgTraits<Args...>::node_type;
+  using scalar_type = typename FourArgTraits<Defaults, Args...>::scalar_type;
+  using local_ordinal_type = typename FourArgTraits<Defaults, Args...>::local_ordinal_type;
+  using global_ordinal_type = typename FourArgTraits<Defaults, Args...>::global_ordinal_type;
+  using node_type = typename FourArgTraits<Defaults, Args...>::node_type;
 public:
   using type = Object<scalar_type, local_ordinal_type, global_ordinal_type, node_type>;
 };
