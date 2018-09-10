@@ -590,6 +590,34 @@ namespace Intrepid2 {
     };
 
     /** 
+     \brief Wedge topology, 12 nodes
+    */
+    template<>
+    struct Wedge<12> {
+      typedef struct Wedge<6> base_cell_topology_type;
+      enum : int { dimension = 3,
+                   numNode = 12,
+                   numVert = 6,
+                   numEdge = 9,
+                   numFace = 5,
+                   numIntr = 1 };
+      static constexpr double coords[12][3]
+                               { { 0.0, 0.0,-1.0}, { 1.0, 0.0,-1.0}, { 0.0, 1.0,-1.0},
+                                 { 0.0, 0.0, 1.0}, { 1.0, 0.0, 1.0}, { 0.0, 1.0, 1.0},
+                                 { 0.5, 0.0,-1.0}, { 0.5, 0.5,-1.0}, { 0.0, 0.5,-1.0},
+                                 { 0.5, 0.0, 1.0}, { 0.5, 0.5, 1.0}, { 0.0, 0.5, 1.0} };
+
+
+      template<typename pointViewType>
+      KOKKOS_INLINE_FUNCTION
+      static bool
+      checkPointInclusion(const pointViewType &point,
+                          const double threshold) {
+        return base_cell_topology_type::checkPointInclusion(point, threshold);
+      }
+    };
+
+    /**
      \brief Wedge topology, 15 nodes
     */
     template<>

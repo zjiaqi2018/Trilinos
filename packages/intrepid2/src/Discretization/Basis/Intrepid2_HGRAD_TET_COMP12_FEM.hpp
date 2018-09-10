@@ -104,7 +104,7 @@ namespace Intrepid2 {
     */
     class Basis_HGRAD_TET_COMP12_FEM {
     public:
-      typedef struct Tetrahedron<4> cell_topology_type;
+      typedef struct Tetrahedron<11> cell_topology_type;
 
       /**
         \brief See Intrepid2::Basis_HGRAD_TET_COMP12_FEM

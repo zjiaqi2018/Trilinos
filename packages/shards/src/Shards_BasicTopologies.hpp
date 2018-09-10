@@ -874,6 +874,26 @@ template<> struct Wedge<6> : public
                       WedgeFaceNodeMap >
 { typedef Wedge<6> base ; };
 
+template<> struct Wedge<12> : public
+  CellTopologyTraits< 3 , 6 , 12 ,
+                      MakeTypeList< Line<3>  ,
+                                    Line<3>  ,
+                                    Line<3>  ,
+                                    Line<3>  ,
+                                    Line<3>  ,
+                                    Line<3>  ,
+                                    Line<3>  ,
+                                    Line<3>  ,
+                                    Line<3>  >::type ,
+                      WedgeEdgeNodeMap ,
+                      MakeTypeList< Quadrilateral<4>  ,
+                                    Quadrilateral<4>  ,
+                                    Quadrilateral<4>  ,
+                                    Triangle<6>  ,
+                                    Triangle<6>  >::type ,
+                      WedgeFaceNodeMap >
+{ typedef Wedge<6> base ; };
+
 template<> struct Wedge<15> : public
   CellTopologyTraits< 3 , 6 , 15 ,
                       MakeTypeList< Line<3>  ,

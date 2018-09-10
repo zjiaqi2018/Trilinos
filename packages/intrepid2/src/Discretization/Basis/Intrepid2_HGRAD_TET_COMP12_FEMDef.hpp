@@ -179,7 +179,7 @@ namespace Intrepid2 {
         
         const auto subtet = getLocalSubTet( r, s, t );
         
-        // idependent verification shows that a given point will produce
+        // independent verification shows that a given point will produce
         // the same shape functions for each tet that contains it, so
         // we only need to use the first one returned.
         if (subtet != -1) {
