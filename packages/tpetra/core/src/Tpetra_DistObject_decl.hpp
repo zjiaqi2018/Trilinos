@@ -56,6 +56,8 @@
 #include "Tpetra_SrcDistObject.hpp"
 #include "Kokkos_ArithTraits.hpp"
 #include <type_traits>
+// Used to implement nonblocking transfers
+#include <functional>
 
 // #ifndef HAVE_TPETRA_TRANSFER_TIMERS
 // #  define HAVE_TPETRA_TRANSFER_TIMERS 1
@@ -77,6 +79,13 @@ namespace KokkosClassic {
 } // namespace KokkosClassic
 
 namespace Tpetra {
+
+  //! The type returned by doImport and other non-blocking transfer types
+  //FIXME: this should be a typed class like Tpetra::Details::Impl::CommRequest
+  //       Ideally, CommRequest should be moved into something public, so we have a generic
+  //       interface for returning MPI requests and associated pre/post wait() code.
+
+  typedef std::function<void (void)> generic_transfer_request_type;
 
   /// \class DistObject
   /// \brief Base class for distributed Tpetra objects that support
@@ -286,6 +295,11 @@ namespace Tpetra {
     doImport (const SrcDistObject& source,
               const Import<LocalOrdinal, GlobalOrdinal, Node>& importer,
               CombineMode CM);
+
+    generic_transfer_request_type
+    doImportNonBlocking (const SrcDistObject& source,
+                         const Import<LocalOrdinal, GlobalOrdinal, Node>& importer,
+                         CombineMode CM);
 
     /// \brief Export data into this object using an Export object
     ///   ("forward mode").
@@ -528,6 +542,13 @@ namespace Tpetra {
                 const ReverseOption revOp,
                 const CombineMode CM);
 
+    generic_transfer_request_type
+    doTransferNonBlocking (const SrcDistObject& src,
+                           const Details::Transfer<local_ordinal_type, global_ordinal_type, node_type>& transfer,
+                           const char modeString[],
+                           const ReverseOption revOp,
+                           const CombineMode CM);
+
     /// \brief Reallocate numExportPacketsPerLID_ and/or
     ///   numImportPacketsPerLID_, if necessary.
     ///
@@ -603,6 +624,23 @@ namespace Tpetra {
                    Distributor& distor,
                    const ReverseOption revOp,
                    const bool commOnHost);
+
+    generic_transfer_request_type
+    doTransferNonBlocking_details (const SrcDistObject& src,
+                                   const CombineMode CM,
+                                   const size_t numSameIDs,
+                                   const Kokkos::DualView<const local_ordinal_type*,
+                                     device_type>& permuteToLIDs,
+                                   const Kokkos::DualView<const local_ordinal_type*,
+                                     device_type>& permuteFromLIDs,
+                                   const Kokkos::DualView<const local_ordinal_type*,
+                                     device_type>& remoteLIDs,
+                                   const Kokkos::DualView<const local_ordinal_type*,
+                                     device_type>& exportLIDs,
+                                   Distributor& distor,
+                                   const ReverseOption revOp,
+                                   const bool commOnHost);
+
 
     /// \name Methods implemented by subclasses and used by doTransfer().
     ///

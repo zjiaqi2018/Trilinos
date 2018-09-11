@@ -70,6 +70,7 @@
 namespace Tpetra {
 
   namespace Details {
+
     /// \brief The type of MPI send that Distributor should use.
     ///
     /// This is an implementation detail of Distributor.  Please do
@@ -631,6 +632,14 @@ namespace Tpetra {
       const ExpView &exports,
       size_t numPackets,
       const ImpView &imports);
+
+    template <class ExpView, class ImpView>
+    typename std::enable_if<(Kokkos::Impl::is_view<ExpView>::value && Kokkos::Impl::is_view<ImpView>::value), std::function<void (void)> >::type
+    doPostsAndWaitsNonBlocking (
+      const ExpView &exports,
+      size_t numPackets,
+      const ImpView &imports);
+
 
     /// \brief Execute the (forward) communication plan.
     ///
@@ -2082,6 +2091,60 @@ namespace Tpetra {
     }
     doWaits ();
   }
+
+  template <class ExpView, class ImpView>
+  typename std::enable_if<(Kokkos::Impl::is_view<ExpView>::value && Kokkos::Impl::is_view<ImpView>::value), std::function<void (void)> >::type
+  Distributor::
+  doPostsAndWaitsNonBlocking (const ExpView& exports,
+                   size_t numPackets,
+                   const ImpView& imports)
+  {
+    using Teuchos::RCP;
+    using Teuchos::rcp;
+    using std::endl;
+    const bool verbose = Tpetra::Details::Behavior::verbose("Distributor");
+
+    RCP<Teuchos::OSTab> tab0, tab1;
+    if (verbose) {
+      tab0 = rcp (new Teuchos::OSTab (out_));
+      const int myRank = comm_->getRank ();
+      std::ostringstream os;
+      os << "Proc " << myRank
+         << ": Distributor::doPostsAndWaitsNonBlocking(3 args, Kokkos): "
+         << "{sendType: " << DistributorSendTypeEnumToString (sendType_)
+         << ", barrierBetween: " << barrierBetween_ << "}" << endl;
+      *out_ << os.str ();
+      tab1 = rcp (new Teuchos::OSTab (out_));
+    }
+
+    TEUCHOS_TEST_FOR_EXCEPTION(
+      requests_.size () != 0, std::runtime_error, "Tpetra::Distributor::"
+      "doPostsAndWaits(3 args): There are " << requests_.size () <<
+      " outstanding nonblocking messages pending.  It is incorrect to call "
+      "this method with posts outstanding.");
+
+    if (verbose) {
+      const int myRank = comm_->getRank ();
+      std::ostringstream os;
+      os << "Proc " << myRank
+         << ": Distributor::doPostsAndWaits: Call doPosts" << endl;
+      *out_ << os.str ();
+    }
+    doPosts (exports, numPackets, imports);
+
+
+    const int myRank = this->comm_->getRank ();
+    return ([=]() {
+      if (verbose) {
+        std::ostringstream os;
+        os << "Proc " << myRank
+           << ": Distributor::doPostsAndWaits: Call doWaits" << endl;
+        *(this->out_) << os.str ();
+      }
+      this->doWaits ();
+    });
+  }
+
 
   template <class ExpView, class ImpView>
   typename std::enable_if<(Kokkos::Impl::is_view<ExpView>::value && Kokkos::Impl::is_view<ImpView>::value)>::type

@@ -75,6 +75,17 @@
 #include <sstream>
 #include <typeinfo>
 #include <vector>
+#include<thread>
+#include<chrono>
+
+namespace {
+  template<typename T, typename ...Args>
+  static
+  std::unique_ptr<T> make_unique( Args&& ...args )
+  {
+      return std::unique_ptr<T>( new T( std::forward<Args>(args)... ) );
+  }
+}
 
 namespace Tpetra {
 
@@ -101,6 +112,7 @@ namespace { // (anonymous)
 
     return oldVal;
   }
+
 } // namespace (anonymous)
 
 //
@@ -5019,6 +5031,9 @@ namespace Tpetra {
     RCP<const import_type> importer = this->getGraph ()->getImporter ();
     RCP<const export_type> exporter = this->getGraph ()->getExporter ();
 
+
+    //typedef decltype (std::declval<MV>().doImportNonBlocking (X_in, *importer, INSERT) ) nonBlockingRequestType;
+    Tpetra::generic_transfer_request_type futureRequest;
     // If beta == 0, then the output MV will be overwritten; none of
     // its entries should be read.  (Sparse BLAS semantics say that we
     // must ignore any Inf or NaN entries in Y_in, if beta is zero.)
@@ -5043,6 +5058,7 @@ namespace Tpetra {
     // below, this will be an (Imported if necessary) column Map MV
     // ready to give to localMultiply().
     RCP<const MV> X_colMap;
+    RCP<MV> X_colMapNonConst;
     if (importer.is_null ()) {
       if (! X_in.isConstantStride ()) {
         // Not all sparse mat-vec kernels can handle an input MV with
@@ -5051,7 +5067,7 @@ namespace Tpetra {
         // copy of X_in, we force creation of the column (== domain)
         // Map MV (if it hasn't already been created, else fetch the
         // cached copy).  This avoids creating a new MV each time.
-        RCP<MV> X_colMapNonConst = getColumnMapMultiVector (X_in, true);
+        X_colMapNonConst = getColumnMapMultiVector (X_in, true);
         Tpetra::deep_copy (*X_colMapNonConst, X_in);
         X_colMap = rcp_const_cast<const MV> (X_colMapNonConst);
       }
@@ -5068,11 +5084,15 @@ namespace Tpetra {
       // elements of the domain Map MV X_in into a separate column Map
       // MV.  Thus, we don't have to worry whether X_in is constant
       // stride.
-      RCP<MV> X_colMapNonConst = getColumnMapMultiVector (X_in);
+      X_colMapNonConst = getColumnMapMultiVector (X_in);
 
       // Import from the domain Map MV to the column Map MV.
-      X_colMapNonConst->doImport (X_in, *importer, INSERT);
-      X_colMap = rcp_const_cast<const MV> (X_colMapNonConst);
+      //X_colMapNonConst->doImport (X_in, *importer, INSERT);
+      futureRequest = X_colMapNonConst->doImportNonBlocking (X_in, *importer, INSERT);
+      //auto request = X_colMapNonConst->doImportNonBlocking (X_in, *importer, INSERT);
+      std::cerr << "Obtained MV import request..." << std::endl;
+      std::cerr << "Doing work..." << std::endl;
+
     }
 
     // Temporary MV for doExport (if needed), or for copying a
@@ -5087,7 +5107,13 @@ namespace Tpetra {
     // constant-stride version of Y_in in this case, because we had to
     // make a constant stride Y_rowMap MV and do an Export anyway.
     if (! exporter.is_null ()) {
-      this->localApply (*X_colMap, *Y_rowMap, Teuchos::NO_TRANS, alpha, ZERO);
+      //this->localApply (*X_colMap, *Y_rowMap, Teuchos::NO_TRANS, alpha, ZERO);
+      KokkosSparse::spmv (KokkosSparse::NoTranspose,
+                          alpha,
+                          lclMatrix_,
+                          (*X_colMap).template getLocalView<device_type> (),
+                          ZERO,
+                          (*Y_rowMap).template getLocalView<device_type> ());
       {
         ProfilingRegion regionExport ("Tpetra::CrsMatrix::apply: Export");
 
@@ -5132,7 +5158,37 @@ namespace Tpetra {
         Tpetra::deep_copy (Y_in, *Y_rowMap);
       }
       else {
-        this->localApply (*X_colMap, Y_in, Teuchos::NO_TRANS, alpha, beta);
+        //this->localApply (*X_colMap, Y_in, Teuchos::NO_TRANS, alpha, beta);
+        std::cerr << "No Export, constant stride\n";
+
+        if (X_colMap.is_null()) {
+          KokkosSparse::spmv (KokkosSparse::NoTranspose,
+                              alpha,
+                              lclMatrix_,
+                              X_in.template getLocalView<device_type> (),
+                              beta,
+                              Y_in.template getLocalView<device_type> ());
+          // we may have done nonBlocking import
+          // In this case, the column map is not
+          std::cerr << "Calling wait()..." << std::endl;
+          futureRequest();
+          std::cerr << "Waited on MV import request" << std::endl;
+//          X_colMap = rcp_const_cast<const MV> (X_colMapNonConst);
+//          KokkosSparse::spmv (KokkosSparse::NoTranspose,
+//                              alpha,
+//                              lclMatrix_,
+//                              (*X_colMap).template getLocalView<device_type> (),
+//                              beta,
+//                              Y_in.template getLocalView<device_type> ());
+        } else {
+          KokkosSparse::spmv (KokkosSparse::NoTranspose,
+                              alpha,
+                              lclMatrix_,
+                              (*X_colMap).template getLocalView<device_type> (),
+                              beta,
+                              Y_in.template getLocalView<device_type> ());
+        }
+
       }
     }
 
