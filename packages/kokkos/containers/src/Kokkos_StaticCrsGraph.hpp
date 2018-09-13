@@ -312,22 +312,40 @@ public:
   entries_type entries;
   row_map_type row_map;
   row_block_type row_block_offsets;
+  row_map_type row_map_remote_start;
 
   //! Construct an empty view.
   KOKKOS_INLINE_FUNCTION
-  StaticCrsGraph () : entries(), row_map(), row_block_offsets() {}
+  StaticCrsGraph () : entries(), row_map(), row_block_offsets()
+  ,row_map_remote_start()
+  {}
 
   //! Copy constructor (shallow copy).
   KOKKOS_INLINE_FUNCTION
   StaticCrsGraph (const StaticCrsGraph& rhs) : entries (rhs.entries), row_map (rhs.row_map),
                                                row_block_offsets(rhs.row_block_offsets)
+  , row_map_remote_start(rhs.row_map_remote_start)
   {}
 
   template<class EntriesType, class RowMapType>
   KOKKOS_INLINE_FUNCTION
   StaticCrsGraph (const EntriesType& entries_,const RowMapType& row_map_) : entries (entries_), row_map (row_map_),
   row_block_offsets()
-  {}
+  , row_map_remote_start()
+  {
+
+    //std::cerr << "StaticCrsGraph Created.." << std::endl;
+  }
+
+  template<class EntriesType, class RowMapType>
+  KOKKOS_INLINE_FUNCTION
+  StaticCrsGraph (const EntriesType& entries_,const RowMapType& row_map_, const RowMapType& remote_row_map_start_) : entries (entries_), row_map (row_map_),
+  row_block_offsets()
+  , row_map_remote_start(remote_row_map_start_)
+  {
+
+    //std::cerr << "StaticCrsGraph ME Created.." << std::endl;
+  }
 
   /** \brief  Assign to a view of the rhs array.
    *          If the old view is the last view
@@ -338,6 +356,7 @@ public:
     entries = rhs.entries;
     row_map = rhs.row_map;
     row_block_offsets = rhs.row_block_offsets;
+    row_map_remote_start = rhs.row_map_remote_start;
     return *this;
   }
 

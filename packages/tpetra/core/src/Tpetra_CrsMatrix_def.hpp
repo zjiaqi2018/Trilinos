@@ -42,6 +42,9 @@
 #ifndef TPETRA_CRSMATRIX_DEF_HPP
 #define TPETRA_CRSMATRIX_DEF_HPP
 
+#undef TPETRA_NON_BLOCKING_IMPORT
+#undef TPETRA_NON_BLOCKING_IMPORT_VERBOSE
+
 /// \file Tpetra_CrsMatrix_def.hpp
 /// \brief Definition of the Tpetra::CrsMatrix class
 ///
@@ -87,6 +90,70 @@ namespace {
   }
 }
 
+
+namespace {
+
+template<typename AMatrix, typename XVector, typename YVector>
+static
+void spmv_overallping(
+    typename YVector::const_value_type& s_a,
+    AMatrix A,
+    XVector x,
+    typename YVector::const_value_type& s_b,
+    YVector y,
+    const bool doRemote=false)
+{
+
+  typedef typename YVector::non_const_value_type value_type;
+  typedef typename AMatrix::ordinal_type         ordinal_type;
+  typedef typename AMatrix::non_const_size_type            size_type;
+
+  typename XVector::const_value_type* KOKKOS_RESTRICT x_ptr = x.data();
+  typename YVector::non_const_value_type* KOKKOS_RESTRICT y_ptr = y.data();
+
+  const typename AMatrix::value_type* KOKKOS_RESTRICT matrixCoeffs = A.values.data();
+  const ordinal_type* KOKKOS_RESTRICT matrixCols     = A.graph.entries.data();
+  const size_type* KOKKOS_RESTRICT matrixRowOffset_starts  = A.graph.row_map.data();
+  const size_type* KOKKOS_RESTRICT matrixRowOffset_stops   = doRemote ? A.graph.row_map_remote_start.data() : matrixRowOffset_starts+1;
+
+
+#if defined(KOKKOS_ENABLE_PROFILING)
+    uint64_t kpID = 0;
+     if(Kokkos::Profiling::profileLibraryLoaded()) {
+      Kokkos::Profiling::beginParallelFor("KokkosSparse::spmv<overlapping,NoTranspose>", 0, &kpID);
+     }
+#endif
+
+  typename YVector::const_value_type zero = 0;
+
+    for(size_type row = 0; row < A.graph.numRows(); ++row) {
+      const size_type rowStart = matrixRowOffset_starts[row];
+      // this is already offset, so no +1
+      const size_type rowEnd   = matrixRowOffset_stops[row];
+
+      value_type sum = 0.0;
+
+      for(size_type i = rowStart; i < rowEnd; ++i) {
+        const ordinal_type x_entry =  matrixCols[i];
+        const value_type alpha_MC  =  s_a * matrixCoeffs[i];
+        sum                    += alpha_MC * x_ptr[x_entry];
+      }
+
+      if(zero == s_b) {
+        y_ptr[row] = sum;
+      } else {
+        y_ptr[row] = s_b * y_ptr[row] + sum;
+      }
+   }
+#if defined(KOKKOS_ENABLE_PROFILING)
+     if(Kokkos::Profiling::profileLibraryLoaded()) {
+        Kokkos::Profiling::endParallelFor(kpID);
+     }
+#endif
+
+}
+
+} // anonymous namepsace
 namespace Tpetra {
 
 namespace { // (anonymous)
@@ -1163,6 +1230,7 @@ namespace Tpetra {
     typedef decltype (myGraph_->k_numRowEntries_) row_entries_type;
 
     if (getProfileType () == DynamicProfile) {
+      //std::cerr << "dynamicProfile.." << std::endl;
       // Pack 2-D storage (DynamicProfile) into 1-D packed storage.
       //
       // DynamicProfile means that the matrix's column indices and
@@ -1509,6 +1577,8 @@ namespace Tpetra {
     // have dynamic profile (getProfileType() == DynamicProfile) and
     // be optimized (isStorageOptimized()).
     if (requestOptimizedStorage) {
+
+      //std::cerr << "OptimizedStorage.." << std::endl;
       // Free the old, unpacked, unoptimized allocations.
       // Change the graph from dynamic to static allocation profile
 
@@ -1531,6 +1601,65 @@ namespace Tpetra {
       this->storageStatus_ = Details::STORAGE_1D_PACKED;
     }
 
+    #ifdef TPETRA_NON_BLOCKING_IMPORT
+    RCP<const import_type> importer = this->getGraph ()->getImporter ();
+    if (! importer.is_null()) {
+      typename row_map_type::value_type max_row_ptr = importer->getNumSameIDs ();
+
+      typename row_map_type::non_const_type remote_starts;
+      remote_starts = typename row_map_type::non_const_type ("Tpetra::CrsGraph::ptr_remote_start",
+                                                            lclNumRows+1);
+      #ifdef TPETRA_NON_BLOCKING_IMPORT_VERBOSE
+      std::ostringstream oss;
+      oss << "sameIDs = " << max_row_ptr << std::endl;
+
+      for (size_t i = 0; i < lclNumRows; ++i ) {
+        oss << "row[" << i << "], cols[";
+        for (typename row_map_type::non_const_value_type r = k_ptrs_const[i]; r < k_ptrs_const[i+1]; ++r) {
+          oss << k_inds[r] << " ";
+          if (k_inds[r] >= max_row_ptr) {
+            remote_starts[i] = r;
+            break;
+          }
+        }
+
+        if (remote_starts[i] == 0) remote_starts[i] = k_ptrs_const[i+1];
+        oss << "]" << std::endl;
+      }
+
+      for (size_t i = 0; i < lclNumRows; ++i ) {
+        oss << "remote_row[" << i << "], cols[";
+        for (typename row_map_type::non_const_value_type r = remote_starts[i]; r < k_ptrs_const[i+1]; ++r) {
+          oss << k_inds[r] << " ";
+        }
+        oss << "]" << std::endl;
+      }
+
+      std::cerr << oss.str ();
+      #else
+
+      for (size_t i = 0; i < lclNumRows; ++i ) {
+        for (typename row_map_type::non_const_value_type r = k_ptrs_const[i]; r < k_ptrs_const[i+1]; ++r) {
+          if (k_inds[r] >= max_row_ptr) {
+            remote_starts[i] = r;
+            break;
+          }
+        }
+
+        if (remote_starts[i] == 0) remote_starts[i] = k_ptrs_const[i+1];
+      }
+      #endif
+
+      row_map_type remote_starts_const = remote_starts;
+      myGraph_->lclGraph_ =
+        typename Graph::local_graph_type (k_inds, k_ptrs_const, remote_starts_const);
+    } else {
+      myGraph_->lclGraph_ =
+        typename Graph::local_graph_type (k_inds, k_ptrs_const);
+
+    }
+#else
+
     // Make the local graph, using the arrays of row offsets and
     // column indices that we built above.  The local graph should be
     // null, but we delete it first so that any memory can be freed
@@ -1541,6 +1670,7 @@ namespace Tpetra {
     // and k_ptrs, and creates the local graph lclGraph_.
     myGraph_->lclGraph_ =
       typename Graph::local_graph_type (k_inds, k_ptrs_const);
+#endif
 
     // Make the local matrix, using the local graph and vals array.
     lclMatrix_ = local_matrix_type ("Tpetra::CrsMatrix::lclMatrix_",
@@ -5033,7 +5163,10 @@ namespace Tpetra {
 
 
     //typedef decltype (std::declval<MV>().doImportNonBlocking (X_in, *importer, INSERT) ) nonBlockingRequestType;
+
+#ifdef TPETRA_NON_BLOCKING_IMPORT
     Tpetra::generic_transfer_request_type futureRequest;
+#endif
     // If beta == 0, then the output MV will be overwritten; none of
     // its entries should be read.  (Sparse BLAS semantics say that we
     // must ignore any Inf or NaN entries in Y_in, if beta is zero.)
@@ -5088,10 +5221,18 @@ namespace Tpetra {
 
       // Import from the domain Map MV to the column Map MV.
       //X_colMapNonConst->doImport (X_in, *importer, INSERT);
+#ifdef TPETRA_NON_BLOCKING_IMPORT
       futureRequest = X_colMapNonConst->doImportNonBlocking (X_in, *importer, INSERT);
       //auto request = X_colMapNonConst->doImportNonBlocking (X_in, *importer, INSERT);
+#ifdef TPETRA_NON_BLOCKING_IMPORT_VERBOSE
       std::cerr << "Obtained MV import request..." << std::endl;
       std::cerr << "Doing work..." << std::endl;
+#endif
+#else
+      X_colMapNonConst->doImport (X_in, *importer, INSERT);
+      X_colMap = rcp_const_cast<const MV> (X_colMapNonConst);
+
+#endif
 
     }
 
@@ -5159,38 +5300,68 @@ namespace Tpetra {
       }
       else {
         //this->localApply (*X_colMap, Y_in, Teuchos::NO_TRANS, alpha, beta);
-        std::cerr << "No Export, constant stride\n";
 
+#ifdef TPETRA_NON_BLOCKING_IMPORT
         if (X_colMap.is_null()) {
-          KokkosSparse::spmv (KokkosSparse::NoTranspose,
-                              alpha,
-                              lclMatrix_,
-                              X_in.template getLocalView<device_type> (),
-                              beta,
-                              Y_in.template getLocalView<device_type> ());
+          // need to partion lclMatrix into local/remote vals/indices, and create
+          // the necessary maps so that kokkosSparse::spmv can be called
+#ifdef TPETRA_NON_BLOCKING_IMPORT_VERBOSE
+          std::cerr << "Calling local spmv" << std::endl;
+#endif
+          spmv_overallping( alpha,
+                            lclMatrix_,
+                            (*importMV_).template getLocalView<device_type> (),
+                            beta,
+                            Y_in.template getLocalView<device_type> (),
+                            false);
+          // you need some delay before calling the request... I don't know why
+          //std::this_thread::sleep_for(std::chrono::milliseconds(100));
           // we may have done nonBlocking import
           // In this case, the column map is not
+#ifdef TPETRA_NON_BLOCKING_IMPORT_VERBOSE
           std::cerr << "Calling wait()..." << std::endl;
+#endif
           futureRequest();
+#ifdef TPETRA_NON_BLOCKING_IMPORT_VERBOSE
           std::cerr << "Waited on MV import request" << std::endl;
-//          X_colMap = rcp_const_cast<const MV> (X_colMapNonConst);
-//          KokkosSparse::spmv (KokkosSparse::NoTranspose,
-//                              alpha,
-//                              lclMatrix_,
-//                              (*X_colMap).template getLocalView<device_type> (),
-//                              beta,
-//                              Y_in.template getLocalView<device_type> ());
-        } else {
-          KokkosSparse::spmv (KokkosSparse::NoTranspose,
-                              alpha,
-                              lclMatrix_,
-                              (*X_colMap).template getLocalView<device_type> (),
-                              beta,
-                              Y_in.template getLocalView<device_type> ());
-        }
+#endif
 
-      }
-    }
+          X_colMap = rcp_const_cast<const MV> (X_colMapNonConst);
+
+#ifdef TPETRA_NON_BLOCKING_IMPORT_VERBOSE
+          std::ostringstream ss;
+
+          ss << *X_colMapNonConst << std::endl
+              << "Map: " << std::endl
+             << *(X_colMapNonConst->getMap ()) << std::endl;
+          std::cerr << ss.str ();
+#endif
+
+          spmv_overallping( alpha,
+                            lclMatrix_,
+                            (*importMV_).template getLocalView<device_type> (),
+                            beta,
+                            Y_in.template getLocalView<device_type> (),
+                            true);
+
+          //this->localApply (*X_colMap, Y_in, Teuchos::NO_TRANS, alpha, beta);
+
+//          KokkosSparse::spmv (KokkosSparse::NoTranspose,
+//                              theAlpha,
+//                              lclMatrix_,
+//                              X.template getLocalView<device_type> (),
+//                              theBeta,
+//                              Y.template getLocalView<device_type> ());
+        } else {
+
+          this->localApply (*X_colMap, Y_in, Teuchos::NO_TRANS, alpha, beta);
+        }
+#else
+        this->localApply (*X_colMap, Y_in, Teuchos::NO_TRANS, alpha, beta);
+#endif
+
+      } // if constant stride
+    } // no export
 
     // If the range Map is a locally replicated Map, sum up
     // contributions from each process.  We set beta = 0 on all

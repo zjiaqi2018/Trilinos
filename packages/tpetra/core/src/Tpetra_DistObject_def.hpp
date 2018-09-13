@@ -2339,12 +2339,12 @@ namespace Tpetra {
                 // FIXME (mfh 26 Apr 2016) Check that all input DualViews
                 // were most recently updated in the same memory space, and
                 // sync them to the same place (based on commOnHost) if not.
-                std::cerr << "Calling unpackAndCombineNew" << std::endl;
+                //std::cerr << "Calling unpackAndCombineNew" << std::endl;
                 this->unpackAndCombineNew (remoteLIDs, this->imports_,
                                            this->numImportPacketsPerLID_,
                                            constantNumPackets, distor, CM);
 
-                std::cerr << "Finished unpackAndCombineNew" << std::endl;
+                //std::cerr << "Finished unpackAndCombineNew" << std::endl;
                 if (verbose) {
                   std::ostringstream os;
                   os << "9. Done!" << endl;
