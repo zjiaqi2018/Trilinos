@@ -57,6 +57,15 @@ namespace {
   using std::endl;
   typedef int LO;
 
+  LO M = 13;
+
+  TEUCHOS_STATIC_SETUP()
+  {
+    Teuchos::CommandLineProcessor& clp = Teuchos::UnitTestRepository::getCLP ();
+    clp.setOption ("M", &M, "First matrix dimension M");
+  }
+
+
   template<class ValueType,
            const bool isInteger = std::is_integral<ValueType>::value>
   struct MachinePrecision
@@ -208,7 +217,7 @@ namespace {
           B_norm = (curAbs > B_norm) ? curAbs : B_norm;
         }
       }
-      Kokkos::deep_copy (C2, A_orig);
+      Kokkos::deep_copy (C2, C_orig);
       for (LO i = 0; i < static_cast<LO> (C2.extent (0)); ++i) {
         for (LO j = 0; j < static_cast<LO> (C2.extent (1)); ++j) {
           const mag_type curAbs =
@@ -397,12 +406,17 @@ namespace {
     Tpetra::Map<> map (comm->getSize (), 1, 0, comm);
 
     auto randPool = preparePseudorandomNumberGenerator<device_type> ();
-    const LO m_vals[] = {1, 2, 5, 13};
     const LO n_vals[] = {1, 2, 5, 13};
     const LO k_vals[] = {1, 2, 5, 13};
-    for (LO m : m_vals) {
+
+    if (comm->getRank() == 0) std::cout << std::endl;
+    LO m = M;
+    {
       for (LO n : n_vals) {
         for (LO k : k_vals) {
+          if (comm->getRank() == 0) 
+            std::cout << "Testing m,n,k = " << m << "," << n << "," << k 
+                      << std::endl;
           testGemmVsTeuchosBlas<entry_type, coeff_type, device_type> (out,
                                                                       success,
                                                                       randPool,

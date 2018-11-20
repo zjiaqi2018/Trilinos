@@ -59,6 +59,8 @@
 #include "NOX_Solver_SolverUtils.H"
 #include "NOX_Direction_Generic.H"
 #include "NOX_Direction_Factory.H"
+#include "NOX_Observer.hpp"
+#include "NOX_SolverStats.hpp"
 #include <cmath>
 
 using namespace NOX;
@@ -82,7 +84,7 @@ TrustRegionBased(const Teuchos::RCP<NOX::Abstract::Group>& grp,
   globalDataPtr = Teuchos::rcp(new NOX::GlobalData(p));
   utilsPtr = globalDataPtr->getUtils();
   meritFuncPtr = globalDataPtr->getMeritFunction();
-  prePostOperator.reset(utilsPtr,p->sublist("Solver Options"));
+  observer = NOX::Solver::parseObserver(p->sublist("Solver Options"));
   init();
 }
 
@@ -183,13 +185,6 @@ reset(const NOX::Abstract::Vector& initialGuess,
   nIter = 0;
   dx = 0;
   status = StatusTest::Unconverged;
-
-  // Print out initialization information
-  if (utilsPtr->isPrintType(NOX::Utils::Parameters)) {
-    utilsPtr->out() << "\n" << NOX::Utils::fill(72) << "\n";
-    utilsPtr->out() << "\n-- Parameters Passed to Nonlinear Solver --\n\n";
-    paramsPtr->print(utilsPtr->out(),5);
-  }
 }
 
 void TrustRegionBased::
@@ -202,13 +197,15 @@ reset(const NOX::Abstract::Vector& initialGuess)
   nIter = 0;
   dx = 0;
   status = StatusTest::Unconverged;
+}
 
-  // Print out initialization information
-  if (utilsPtr->isPrintType(NOX::Utils::Parameters)) {
-    utilsPtr->out() << "\n" << NOX::Utils::fill(72) << "\n";
-    utilsPtr->out() << "\n-- Parameters Passed to Nonlinear Solver --\n\n";
-    paramsPtr->print(utilsPtr->out(),5);
-  }
+void TrustRegionBased::
+reset()
+{
+  // Initialize
+  nIter = 0;
+  dx = 0;
+  status = StatusTest::Unconverged;
 }
 
 TrustRegionBased::~TrustRegionBased()
@@ -217,16 +214,18 @@ TrustRegionBased::~TrustRegionBased()
 }
 
 
-NOX::StatusTest::StatusType TrustRegionBased::getStatus()
+NOX::StatusTest::StatusType TrustRegionBased::getStatus() const
 {
   return status;
 }
 
 NOX::StatusTest::StatusType TrustRegionBased::step()
 {
-  prePostOperator.runPreIterate(*this);
+  observer->runPreIterate(*this);
 
   if (nIter == 0) {
+    globalDataPtr->getNonConstSolverStatistics()->incrementNumNonlinearSolves();
+
     // Compute F of initital guess
     solnPtr->computeF();
     newF = meritFuncPtr->computef(*solnPtr);
@@ -252,7 +251,7 @@ NOX::StatusTest::StatusType TrustRegionBased::step()
   {
     utilsPtr->out() << "NOX::Solver::TrustRegionBased::iterate - unable to calculate Newton direction" << std::endl;
     status = StatusTest::Failed;
-    prePostOperator.runPostIterate(*this);
+    observer->runPostIterate(*this);
     printUpdate();
     return status;
   }
@@ -262,7 +261,7 @@ NOX::StatusTest::StatusType TrustRegionBased::step()
   {
     utilsPtr->err() << "NOX::Solver::TrustRegionBased::iterate - unable to calculate Cauchy direction" << std::endl;
     status = StatusTest::Failed;
-    prePostOperator.runPostIterate(*this);
+    observer->runPostIterate(*this);
     printUpdate();
     return status;
   }
@@ -278,6 +277,7 @@ NOX::StatusTest::StatusType TrustRegionBased::step()
 
   // Update iteration count.
   nIter ++;
+  globalDataPtr->getNonConstSolverStatistics()->incrementNumNonlinearIterations();
 
   // Copy current soln to the old soln.
   *oldSolnPtr = *solnPtr;
@@ -357,8 +357,9 @@ NOX::StatusTest::StatusType TrustRegionBased::step()
     const Abstract::Vector& dir = *dirPtr;
 
     // Compute new X
-    prePostOperator.runPreSolutionUpdate(dir,*this);
+    observer->runPreSolutionUpdate(dir,*this);
     soln.computeX(*oldSolnPtr, dir, step);
+    observer->runPostSolutionUpdate(*this);
 
     // Calculate true step length
     dx = step * dir.norm();
@@ -495,7 +496,7 @@ NOX::StatusTest::StatusType TrustRegionBased::step()
   if (utilsPtr->isPrintType(Utils::InnerIteration))
     utilsPtr->out() << NOX::Utils::fill(72) << std::endl;
 
-  prePostOperator.runPostIterate(*this);
+  observer->runPostIterate(*this);
 
   printUpdate();
 
@@ -504,7 +505,9 @@ NOX::StatusTest::StatusType TrustRegionBased::step()
 
 NOX::StatusTest::StatusType TrustRegionBased::solve()
 {
-  prePostOperator.runPreSolve(*this);
+  observer->runPreSolve(*this);
+
+  this->reset();
 
   // Iterate until converged or failed
   while (status == StatusTest::Unconverged) {
@@ -515,7 +518,7 @@ NOX::StatusTest::StatusType TrustRegionBased::solve()
   outputParams.set("Nonlinear Iterations", nIter);
   outputParams.set("2-Norm of Residual", solnPtr->getNormF());
 
-  prePostOperator.runPostSolve(*this);
+  observer->runPostSolve(*this);
 
   return status;
 }
@@ -538,6 +541,12 @@ int TrustRegionBased::getNumIterations() const
 const Teuchos::ParameterList& TrustRegionBased::getList() const
 {
   return *paramsPtr;
+}
+
+Teuchos::RCP<const NOX::SolverStats>
+NOX::Solver::TrustRegionBased::getSolverStatistics() const
+{
+  return globalDataPtr->getSolverStatistics();
 }
 
 // protected
