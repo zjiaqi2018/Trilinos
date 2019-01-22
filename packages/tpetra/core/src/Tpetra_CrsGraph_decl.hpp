@@ -333,7 +333,11 @@ namespace Tpetra {
     ///   default values.
     CrsGraph (const Teuchos::RCP<const map_type>& rowMap,
               const size_t maxNumEntriesPerRow,
+#ifdef  TPETRA_ENABLE_DEFAULT_STATIC_PFTYPE
+              const ProfileType pftype = StaticProfile,
+#else
               const ProfileType pftype = DynamicProfile,
+#endif
               const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null);
 
     /// \brief Constructor specifying a (possibly different) upper
@@ -355,7 +359,11 @@ namespace Tpetra {
     ///   default values.
     CrsGraph (const Teuchos::RCP<const map_type>& rowMap,
               const Kokkos::DualView<const size_t*, execution_space>& numEntPerRow,
+#ifdef  TPETRA_ENABLE_DEFAULT_STATIC_PFTYPE
+              const ProfileType pftype = StaticProfile,
+#else
               const ProfileType pftype = DynamicProfile,
+#endif
               const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null);
 
     /// \brief Constructor specifying a (possibly different) upper
@@ -378,7 +386,11 @@ namespace Tpetra {
     ///   default values.
     CrsGraph (const Teuchos::RCP<const map_type>& rowMap,
               const Teuchos::ArrayRCP<const size_t>& numEntPerRow,
+#ifdef  TPETRA_ENABLE_DEFAULT_STATIC_PFTYPE
+              const ProfileType pftype = StaticProfile,
+#else
               const ProfileType pftype = DynamicProfile,
+#endif
               const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null);
 
     /// \brief Constructor specifying column Map and a single upper
@@ -405,7 +417,11 @@ namespace Tpetra {
     CrsGraph (const Teuchos::RCP<const map_type>& rowMap,
               const Teuchos::RCP<const map_type>& colMap,
               const size_t maxNumEntriesPerRow,
+#ifdef  TPETRA_ENABLE_DEFAULT_STATIC_PFTYPE
+              const ProfileType pftype = StaticProfile,
+#else
               const ProfileType pftype = DynamicProfile,
+#endif
               const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null);
 
     /// \brief Constructor specifying column Map and number of entries in each row.
@@ -429,7 +445,11 @@ namespace Tpetra {
     CrsGraph (const Teuchos::RCP<const map_type>& rowMap,
               const Teuchos::RCP<const map_type>& colMap,
               const Kokkos::DualView<const size_t*, execution_space>& numEntPerRow,
+#ifdef  TPETRA_ENABLE_DEFAULT_STATIC_PFTYPE
+              const ProfileType pftype = StaticProfile,
+#else
               const ProfileType pftype = DynamicProfile,
+#endif
               const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null);
 
     /// \brief Constructor specifying column Map and number of entries
@@ -454,7 +474,11 @@ namespace Tpetra {
     CrsGraph (const Teuchos::RCP<const map_type>& rowMap,
               const Teuchos::RCP<const map_type>& colMap,
               const Teuchos::ArrayRCP<const size_t>& numEntPerRow,
+#ifdef  TPETRA_ENABLE_DEFAULT_STATIC_PFTYPE
+              const ProfileType pftype = StaticProfile,
+#else
               const ProfileType pftype = DynamicProfile,
+#endif
               const Teuchos::RCP<Teuchos::ParameterList>& params = Teuchos::null);
 
     /// \brief Constructor specifying column Map and arrays containing

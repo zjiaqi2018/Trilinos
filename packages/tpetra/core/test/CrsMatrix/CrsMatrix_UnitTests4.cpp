@@ -367,7 +367,7 @@ inline void tupleToArray(Array<T> &arr, const tuple &tup)
     RCP<const Map<LO,GO,Node> > map = createContigMapWithNode<LO,GO,Node>(INVALID,1,comm);
     const Scalar SZERO = ScalarTraits<Scalar>::zero();
     {
-      MAT matrix(map,map,0,StaticProfile);
+      MAT matrix(map,map,1,StaticProfile);
       TEST_EQUALITY_CONST( matrix.isFillActive(),   true );
       TEST_EQUALITY_CONST( matrix.isFillComplete(), false );
       matrix.insertLocalValues( 0, tuple<LO>(0), tuple<Scalar>(0) );
@@ -402,7 +402,11 @@ inline void tupleToArray(Array<T> &arr, const tuple &tup)
       TEST_THROW( matrix.fillComplete(),        std::runtime_error );
     }
     {
-      MAT matrix(map,map,0,StaticProfile);
+      // 2 entries per row because 2 calls are made to insertLocalValues.
+      // insertLocalValues does not check if entry already exists, it just adds
+      // the duplicate (which is later compressed out). So, we need the extra
+      // allocations, even though we only have one nonzero per row.
+      MAT matrix(map,map,2,StaticProfile);
       TEST_EQUALITY_CONST( matrix.isFillActive(),   true );
       TEST_EQUALITY_CONST( matrix.isFillComplete(), false );
       matrix.insertLocalValues( 0, tuple<LO>(0), tuple<Scalar>(0) );
@@ -611,7 +615,7 @@ inline void tupleToArray(Array<T> &arr, const tuple &tup)
     auto map = createContigMapWithNode<LO, GO, Node> (INVALID, 1, comm);
 
     // construct matrix
-    CrsMatrix<Scalar,LO,GO,Node> A (map, map, 0, StaticProfile);
+    CrsMatrix<Scalar,LO,GO,Node> A (map, map, 1, StaticProfile);
     A.insertLocalValues (0, tuple<LO> (0), tuple<Scalar> (STS::zero ()));
     A.fillComplete (map, map);
 

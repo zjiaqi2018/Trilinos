@@ -66,6 +66,7 @@ namespace {
 
   using Tpetra::ProfileType;
   using Tpetra::StaticProfile;
+  using Tpetra::DynamicProfile;
   using Teuchos::arcp;
   using Teuchos::arcpClone;
   using Teuchos::Array;
@@ -569,8 +570,12 @@ namespace {
 
         RCP<row_graph_type> test_row;
         {
+#ifdef TPETRA_ENABLE_DEFAULT_STATIC_PFTYPE
           // allocate with no space
-          RCP<crs_graph_type> test_crs = rcp (new crs_graph_type (map, 0));
+          RCP<crs_graph_type> test_crs = rcp (new crs_graph_type (map, 1, StaticProfile));
+#else
+          RCP<crs_graph_type> test_crs = rcp (new crs_graph_type (map, 0, DynamicProfile));
+#endif
           // invalid, because none are allocated yet
           TEST_EQUALITY_CONST( test_crs->getNodeAllocationSize(), STINV );
           if (myRank != 1) {

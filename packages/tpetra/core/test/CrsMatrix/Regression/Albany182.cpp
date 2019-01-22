@@ -667,13 +667,14 @@ namespace { // (anonymous)
 
     RCP<CrsMatrixType> A;
     if (! staticGraph) {
-      A = rcp (new CrsMatrixType (rowMap, 0));
+      const size_t maxNumEntPerRow = 10; // needs to be an upper bound
+      A = rcp (new CrsMatrixType (rowMap, maxNumEntPerRow));
       insertIntoOverlappingCrsMatrix (*A);
     }
     else {
       using Teuchos::rcp_const_cast;
       typedef typename CrsMatrixType::crs_graph_type crs_graph_type;
-      RCP<crs_graph_type> G (new crs_graph_type (rowMap, 0));
+      RCP<crs_graph_type> G (new crs_graph_type (rowMap, 10));
       insertIntoOverlappingCrsGraph (*G);
       G->fillComplete (domainMap, rangeMap);
       // typedef typename CrsMatrixType::device_type::execution_space execution_space;
