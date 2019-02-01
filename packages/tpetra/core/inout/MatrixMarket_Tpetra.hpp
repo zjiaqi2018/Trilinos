@@ -458,14 +458,14 @@ namespace Tpetra {
                             std::logic_error,
                             "pRowMap->getNodeElementList().size() = "
                             << myNumRows
-                            << " != pRowMap->getNodeNumElements() = "
+                            << " != (*pRowMap).getNodeNumElements() = "
                             << pRowMap->getNodeNumElements() << ".  "
                             "Please report this bug to the Tpetra developers.");
          TEUCHOS_TEST_FOR_EXCEPTION(myRank == 0 && numEntriesPerRow.size() < myNumRows,
                             std::logic_error,
                             "On Proc 0: numEntriesPerRow.size() = "
                             << numEntriesPerRow.size()
-                            << " != pRowMap->getNodeElementList().size() = "
+                            << " != (*pRowMap).getNodeElementList().size() = "
                             << myNumRows << ".  Please report this bug to the "
                             "Tpetra developers.");
 
@@ -818,12 +818,8 @@ namespace Tpetra {
 
         // Construct the CrsMatrix, using the row map, with the
         // constructor specifying the number of nonzeros for each row.
-        // Create with DynamicProfile, so that the fillComplete() can
-        // do first-touch reallocation (a NUMA (Non-Uniform Memory
-        // Access) optimization on multicore CPUs).
         RCP<sparse_matrix_type> A =
-          rcp (new sparse_matrix_type (pRowMap, myNumEntriesPerRow,
-                                       DynamicProfile));
+          rcp (new sparse_matrix_type (pRowMap, myNumEntriesPerRow, Tpetra::StaticProfile));
 
         // List of the global indices of my rows.
         // They may or may not be contiguous.
@@ -911,12 +907,9 @@ namespace Tpetra {
 
         // Construct the CrsMatrix, using the row map, with the
         // constructor specifying the number of nonzeros for each row.
-        // Create with DynamicProfile, so that the fillComplete() can
-        // do first-touch reallocation (a NUMA (Non-Uniform Memory
-        // Access) optimization on multicore CPUs).
         RCP<sparse_matrix_type> A =
           rcp (new sparse_matrix_type (pRowMap, myNumEntriesPerRow,
-                                       DynamicProfile, constructorParams));
+                                       Tpetra::StaticProfile, constructorParams));
 
         // List of the global indices of my rows.
         // They may or may not be contiguous.
@@ -976,14 +969,11 @@ namespace Tpetra {
         typedef typename ArrayView<const GO>::size_type size_type;
 
         // Construct the CrsMatrix.
-        //
-        // Create with DynamicProfile, so that the fillComplete() can
-        // do first-touch reallocation.
         RCP<sparse_matrix_type> A; // the matrix to return.
         if (colMap.is_null ()) { // the user didn't provide a column Map
-          A = rcp (new sparse_matrix_type (rowMap, myNumEntriesPerRow, DynamicProfile));
+          A = rcp (new sparse_matrix_type (rowMap, myNumEntriesPerRow, Tpetra::StaticProfile));
         } else { // the user provided a column Map
-          A = rcp (new sparse_matrix_type (rowMap, colMap, myNumEntriesPerRow, DynamicProfile));
+          A = rcp (new sparse_matrix_type (rowMap, colMap, myNumEntriesPerRow, Tpetra::StaticProfile));
         }
 
         // List of the global indices of my rows.
@@ -1047,7 +1037,7 @@ namespace Tpetra {
       readBanner (std::istream& in,
                   size_t& lineNumber,
                   const bool tolerant=false,
-                  const bool /* debug */=false,
+                  const bool debug=false,
                   const bool isGraph=false)
       {
         using Teuchos::MatrixMarket::Banner;
@@ -1139,7 +1129,7 @@ namespace Tpetra {
                      const Teuchos::RCP<const Teuchos::MatrixMarket::Banner>& pBanner,
                      const Teuchos::RCP<const comm_type>& pComm,
                      const bool tolerant = false,
-                     const bool /* debug */ = false)
+                     const bool debug = false)
       {
         using Teuchos::MatrixMarket::readCoordinateDimensions;
         using Teuchos::Tuple;
@@ -3894,10 +3884,15 @@ namespace Tpetra {
         const size_type myNumRows = myRows.size ();
         const global_ordinal_type indexBase = gatherRowMap->getIndexBase ();
 
+        size_t maxNumEntriesPerRow = 0;
         ArrayRCP<size_t> gatherNumEntriesPerRow = arcp<size_t>(myNumRows);
         for (size_type i_ = 0; i_ < myNumRows; i_++) {
           gatherNumEntriesPerRow[i_] = numEntriesPerRow[myRows[i_]-indexBase];
+          maxNumEntriesPerRow = std::max(gatherNumEntriesPerRow[i_], maxNumEntriesPerRow);
         }
+        // Since numEntriesPerRow is only valid on rank 0, maxNumEntriesPerRow
+        // is only nonzero on rank 0.
+        Teuchos::broadcast<int,size_t>(*pComm, 0, Teuchos::inOutArg(maxNumEntriesPerRow));
 
         // Create a matrix using this Map, and fill in on Proc 0.  We
         // know how many entries there are in each row, so we can use
@@ -3948,9 +3943,9 @@ namespace Tpetra {
 
         RCP<sparse_matrix_type> A;
         if (colMap.is_null ()) {
-          A = rcp (new sparse_matrix_type (rowMap, 0));
+          A = rcp (new sparse_matrix_type (rowMap, maxNumEntriesPerRow, Tpetra::StaticProfile));
         } else {
-          A = rcp (new sparse_matrix_type (rowMap, colMap, 0));
+          A = rcp (new sparse_matrix_type (rowMap, colMap, maxNumEntriesPerRow, Tpetra::StaticProfile));
         }
         typedef Export<local_ordinal_type, global_ordinal_type, node_type> export_type;
         export_type exp (gatherRowMap, rowMap);
@@ -5997,6 +5992,7 @@ namespace Tpetra {
         using Teuchos::null;
         using Teuchos::RCP;
         using Teuchos::rcpFromRef;
+        using Teuchos::arcp;
         using std::cerr;
         using std::endl;
         typedef scalar_type ST;
@@ -6090,7 +6086,8 @@ namespace Tpetra {
         // for the case that the matrix is not square.
         RCP<sparse_matrix_type> newMatrix =
           rcp (new sparse_matrix_type (gatherRowMap, gatherColMap,
-                                       static_cast<size_t> (0)));
+                                       pMatrix->getGlobalMaxNumRowEntries(),
+                                       Tpetra::StaticProfile));
         // Import the sparse matrix onto Proc 0.
         newMatrix->doImport (*pMatrix, importer, INSERT);
 
