@@ -2249,15 +2249,6 @@ public:
         "Please report this bug to the Tpetra developers." << std::endl;
       return;
     }
-    else {
-      // Kyungjoo: where is val_ modified ? 
-      //    When we have dual view as a member variable, 
-      //    which function should make sure the val_ is upto date ? 
-      //    IMO, wherever it is used, the function should check its
-      //    availability.
-      const_cast<this_type*>(src)->sync_host();
-    }
-    this->sync_host();
 
     bool lclErr = false;
 #ifdef HAVE_TPETRA_DEBUG
@@ -2294,13 +2285,16 @@ public:
       std::cerr << os.str ();
     }
 
-    TEUCHOS_TEST_FOR_EXCEPTION(permuteToLIDs.need_sync_host(),
-                               std::runtime_error, "Tpetra::Experimental::copyAndPermuteNew : "
-                               "permuteToLIDs is read-only and host buffer must be up-to-date.");
-    TEUCHOS_TEST_FOR_EXCEPTION(permuteFromLIDs.need_sync_host(),
-                               std::runtime_error, "Tpetra::Experimental::copyAndPermuteNew : "
-                               "permuteFromLIDs is read-only and host buffer must be up-to-date.");
+    // work around for const object sync
+    if (permuteToLIDs.need_sync_host()) {
+      Kokkos::DualView<const local_ordinal_type*, device_type> permuteToLIDsTemp = permuteToLIDs;
+      permuteToLIDsTemp.sync_host();
+    }
     const auto permuteToLIDsHost = permuteToLIDs.view_host();
+    if (permuteFromLIDs.need_sync_host()) {
+      Kokkos::DualView<const local_ordinal_type*, device_type> permuteFromLIDsTemp = permuteFromLIDs;
+      permuteFromLIDsTemp.sync_host();
+    }
     const auto permuteFromLIDsHost = permuteFromLIDs.view_host();
 
     if (canUseLocalColumnIndices) {
@@ -2849,8 +2843,8 @@ public:
   BlockCrsMatrix<Scalar, LO, GO, Node>::
   packAndPrepareNew (const ::Tpetra::SrcDistObject& source,
                      const Kokkos::DualView<const local_ordinal_type*, device_type>& exportLIDs,
-                     Kokkos::DualView<packet_type*, buffer_device_type>& exports, // output
-                     const Kokkos::DualView<size_t*, buffer_device_type>& numPacketsPerLID, // output
+                     Kokkos::DualView<packet_type*, buffer_device_type>& exports,
+                     const Kokkos::DualView<size_t*, buffer_device_type>& numPacketsPerLID,
                      size_t& constantNumPackets,
                      Distributor& /* distor */)
   {
@@ -2947,14 +2941,14 @@ public:
 
     // Graph information is on host; let's do this on host parallel reduce
     // Sync necessary data to host
-    TEUCHOS_TEST_FOR_EXCEPTION(exportLIDs.need_sync_host(),
-                               std::runtime_error, "Tpetra::Experimental::packAndPrepareNew : "
-                               "exportLIDs is read-only and host buffer must be up-to-date.");
-    auto exportLIDsHost = exportLIDs.view_host();
-    auto numPacketsPerLIDHost = numPacketsPerLID.view_host(); // we will modify this.
-    const_cast<Kokkos::DualView<size_t*, buffer_device_type>&>(numPacketsPerLID).modify_host();
-    {
 
+    if (exportLIDs.need_sync_host()) {
+      Kokkos::DualView<const local_ordinal_type*, device_type> exportLIDsTemp = exportLIDs;
+      exportLIDsTemp.sync_host();
+    }
+    auto exportLIDsHost = exportLIDs.view_host();
+    auto numPacketsPerLIDHost = numPacketsPerLID.view_host(); // we will modify this
+    {
       typedef Impl::BlockCrsReducer<Impl::BlockCrsRowStruct<size_t>,host_exec> reducer_type;
       const auto policy = Kokkos::RangePolicy<host_exec>(size_t(0), numExportLIDs);
       Kokkos::parallel_reduce
@@ -2968,6 +2962,10 @@ public:
           numPacketsPerLIDHost(i) = numBytes;
           update += typename reducer_type::value_type(numEnt, numBytes, numEnt);
         }, rowReducerStruct);
+      {
+        Kokkos::DualView<size_t*, buffer_device_type> numPacketsPerLIDTemp = numPacketsPerLID;
+        numPacketsPerLIDTemp.modify_host();
+      }
     }
 
     // Compute the number of bytes ("packets") per row to pack.  While
@@ -3020,8 +3018,6 @@ public:
       const map_type& srcColMap = * (srcGraph.getColMap ());
 
       // Pack the data for each row to send, into the 'exports' buffer.
-      // exports will be modified on host.
-      exports.modify_host();
       {
         typedef Kokkos::TeamPolicy<host_exec> policy_type;
         const auto policy =
@@ -3087,6 +3083,7 @@ public:
       std::cerr << os.str ();
     }
   }
+
 
   template<class Scalar, class LO, class GO, class Node>
   void
@@ -3193,14 +3190,16 @@ public:
       std::cerr << os.str ();
     }
 
-    TEUCHOS_TEST_FOR_EXCEPTION(importLIDs.need_sync_host(),
-                               std::runtime_error, "Tpetra::Experimental::unpackAndCombineNew : "
-                               "importLIDs is read-only and host buffer must be up-to-date.");
-    TEUCHOS_TEST_FOR_EXCEPTION(numPacketsPerLID.need_sync_host(),
-                               std::runtime_error, "Tpetra::Experimental::unpackAndCombineNew : "
-                               "numPacketsPerLID is read-only and host buffer must be up-to-date.");
-
+    if (importLIDs.need_sync_host()) {
+      Kokkos::DualView<const local_ordinal_type*, device_type> importLIDsTemp = importLIDs;
+      importLIDsTemp.sync_host();
+    }
     const auto importLIDsHost = importLIDs.view_host();
+
+    if (numPacketsPerLID.need_sync_host()) {
+      Kokkos::DualView<const size_t*, buffer_device_type> numPacketsPerLIDTemp = numPacketsPerLID;
+      numPacketsPerLIDTemp.sync_host();
+    }
     const auto numPacketsPerLIDHost = numPacketsPerLID.view_host();
 
     Kokkos::View<size_t*,host_exec> offset("offset", numImportLIDs+1);
@@ -3341,6 +3340,7 @@ public:
       std::cerr << os.str ();
     }
   }
+
 
   template<class Scalar, class LO, class GO, class Node>
   std::string
