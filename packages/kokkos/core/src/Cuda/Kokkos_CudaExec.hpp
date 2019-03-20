@@ -288,6 +288,8 @@ struct CudaParallelLaunch< DriverType
       }
       #endif
 
+
+
       // Copy functor to constant memory on the device
       cudaMemcpyToSymbol(
         kokkos_impl_cuda_constant_memory_buffer, &driver, sizeof(DriverType) );
@@ -345,6 +347,9 @@ struct CudaParallelLaunch< DriverType
 
       KOKKOS_ENSURE_CUDA_LOCK_ARRAYS_ON_DEVICE();
 
+      // CMS/DJS - KOKKOS_LAUNCH_BLOCKING
+      Kokkos::Cuda::fence();
+
       // Invoke the driver function on the device
       cuda_parallel_launch_local_memory
         < DriverType, MaxThreadsPerBlock, MinBlocksPerSM >
@@ -392,6 +397,9 @@ struct CudaParallelLaunch< DriverType
       #endif
 
       KOKKOS_ENSURE_CUDA_LOCK_ARRAYS_ON_DEVICE();
+
+      // CMS/DJS - KOKKOS_LAUNCH_BLOCKING
+      Kokkos::Cuda::fence();
 
       // Invoke the driver function on the device
       cuda_parallel_launch_local_memory< DriverType >

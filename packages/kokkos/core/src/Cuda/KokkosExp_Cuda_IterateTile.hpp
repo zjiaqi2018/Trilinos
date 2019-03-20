@@ -83,6 +83,8 @@ struct CudaLaunch
                     , const dim3       & block
             )
   {
+    // CMS/DJS - KOKKOS_LAUNCH_BLOCKING
+    Kokkos::fence();
     cuda_parallel_launch< DriverType ><<< grid , block >>>(driver);
   }
 
