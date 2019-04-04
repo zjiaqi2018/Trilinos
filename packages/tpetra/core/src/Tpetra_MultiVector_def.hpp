@@ -3257,9 +3257,9 @@ namespace Tpetra {
   template <class Scalar, class LO, class GO, class Node>
   MultiVector<Scalar, LO, GO, Node>::
   MultiVector (const MultiVector<Scalar, LO, GO, Node>& X,
-               const map_type& subMap,
-               const size_t offset) :
-    base_type (Teuchos::null) // to be replaced below
+               const Teuchos::RCP<const map_type>& subMap,
+               const local_ordinal_type rowOffset) :
+    base_type (subMap)
   {
     using Kokkos::ALL;
     using Kokkos::subview;
@@ -3281,29 +3281,33 @@ namespace Tpetra {
     // Be careful to use the input Map's communicator, not X's.  The
     // idea is that, on return, *this is a subview of X, using the
     // input Map.
-    const auto comm = subMap.getComm ();
+    const auto comm = subMap->getComm ();
     TEUCHOS_ASSERT( ! comm.is_null () );
     const int myRank = comm->getRank ();
 
-    const size_t lclNumRowsBefore = X.getLocalLength ();
-    const size_t numCols = X.getNumVectors ();
-    const size_t newNumRows = subMap.getNodeNumElements ();
+    const LO lclNumRowsBefore = static_cast<LO> (X.getLocalLength ());
+    const LO numCols = static_cast<LO> (X.getNumVectors ());
+    const LO newNumRows = static_cast<LO> (subMap->getNodeNumElements ());
     if (verbose) {
       std::ostringstream os;
-      os << "Proc " << myRank << ": " << prefix << "X: {lclNumRows: "
-         << lclNumRowsBefore << ", origLclNumRows: " << X.getOrigNumLocalRows ()
-         << ", numCols: " << numCols << "}, subMap: " << newNumRows << endl;
+      os << "Proc " << myRank << ": " << prefix
+         << "X: {lclNumRows: " << lclNumRowsBefore
+         << ", origLclNumRows: " << X.getOrigNumLocalRows ()
+         << ", numCols: " << numCols << "}, "
+         << "subMap: {lclNumRows: " << newNumRows << "}" << endl;
       std::cerr << os.str ();
     }
     // We ask for the _original_ number of rows in X, because X could
     // be a shorter (fewer rows) view of a longer MV.  (For example, X
     // could be a domain Map view of a column Map MV.)
-    const bool tooManyElts = newNumRows + offset > X.getOrigNumLocalRows ();
+    const bool tooManyElts =
+      newNumRows + rowOffset > static_cast<LO> (X.getOrigNumLocalRows ());
     if (tooManyElts) {
       errStrm = std::unique_ptr<std::ostringstream> (new std::ostringstream);
-      *errStrm << "  Proc " << myRank << ": subMap.getNodeNumElements() (="
-        << newNumRows << ") + offset (=" << offset << ") > X.getOrigNumLocal"
-        "Rows() (=" << X.getOrigNumLocalRows () << ")." << endl;
+      *errStrm << "  Proc " << myRank << ": subMap->getNodeNumElements() (="
+               << newNumRows << ") + rowOffset (=" << rowOffset
+               << ") > X.getOrigNumLocalRows() (=" << X.getOrigNumLocalRows ()
+               << ")." << endl;
       lclGood = 0;
       TEUCHOS_TEST_FOR_EXCEPTION
         (! debug && tooManyElts, std::invalid_argument,
@@ -3322,8 +3326,11 @@ namespace Tpetra {
       }
     }
 
-    const std::pair<size_t, size_t> origRowRng (offset, X.origView_.extent (0));
-    const std::pair<size_t, size_t> rowRng (offset, offset + newNumRows);
+    using range_type = std::pair<LO, LO>;
+    const range_type origRowRng
+      (rowOffset, static_cast<LO> (X.origView_.extent (0)));
+    const range_type rowRng
+      (rowOffset, rowOffset + newNumRows);
 
     dual_view_type newOrigView = subview (X.origView_, origRowRng, ALL ());
     // FIXME (mfh 29 Sep 2016) If we just use X.view_ here, it breaks
@@ -3331,13 +3338,13 @@ namespace Tpetra {
     // ability to create domain Map views of column Map MultiVectors,
     // and then get the original column Map MultiVector out again).
     // If we just use X.origView_ here, it breaks the fix for #46.
-    // The test for offset == 0 is a hack that makes both tests pass,
-    // but doesn't actually fix the more general issue.  In
+    // The test for rowOffset == 0 is a hack that makes both tests
+    // pass, but doesn't actually fix the more general issue.  In
     // particular, the right way to fix Gauss-Seidel would be to fix
     // #385; that would make "getting the original column Map
     // MultiVector out again" unnecessary.
     dual_view_type newView =
-      subview (offset == 0 ? X.origView_ : X.view_, rowRng, ALL ());
+      subview (rowOffset == 0 ? X.origView_ : X.view_, rowRng, ALL ());
 
     // NOTE (mfh 06 Jan 2015) Work-around to deal with Kokkos not
     // handling subviews of degenerate Views quite so well.  For some
@@ -3346,23 +3353,22 @@ namespace Tpetra {
     // desired (degenerate) dimensions.
     if (newOrigView.extent (0) == 0 &&
         newOrigView.extent (1) != X.origView_.extent (1)) {
-      newOrigView = allocDualView<Scalar, LO, GO, Node> (size_t (0),
-                                                         X.getNumVectors ());
+      newOrigView =
+        allocDualView<Scalar, LO, GO, Node> (0, X.getNumVectors ());
     }
     if (newView.extent (0) == 0 &&
         newView.extent (1) != X.view_.extent (1)) {
-      newView = allocDualView<Scalar, LO, GO, Node> (size_t (0),
-                                                     X.getNumVectors ());
+      newView =
+        allocDualView<Scalar, LO, GO, Node> (0, X.getNumVectors ());
     }
 
     MV subViewMV = X.isConstantStride () ?
-      MV (Teuchos::rcp (new map_type (subMap)), newView, newOrigView) :
-      MV (Teuchos::rcp (new map_type (subMap)), newView, newOrigView,
-          X.whichVectors_ ());
+      MV (subMap, newView, newOrigView) :
+      MV (subMap, newView, newOrigView, X.whichVectors_ ());
 
     if (debug) {
-      const size_t lclNumRowsRet = subViewMV.getLocalLength ();
-      const size_t numColsRet = subViewMV.getNumVectors ();
+      const LO lclNumRowsRet = static_cast<LO> (subViewMV.getLocalLength ());
+      const LO numColsRet = static_cast<LO> (subViewMV.getNumVectors ());
       if (newNumRows != lclNumRowsRet || numCols != numColsRet) {
         lclGood = 0;
         if (errStrm.get () == nullptr) {
@@ -3404,6 +3410,15 @@ namespace Tpetra {
       std::cerr << os.str ();
     }
   }
+
+  template <class Scalar, class LO, class GO, class Node>
+  MultiVector<Scalar, LO, GO, Node>::
+  MultiVector (const MultiVector<Scalar, LO, GO, Node>& X,
+               const map_type& subMap,
+               const size_t rowOffset) :
+    MultiVector (X, Teuchos::RCP<const map_type> (new map_type (subMap)),
+                 static_cast<local_ordinal_type> (rowOffset))
+  {}
 
   template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
   Teuchos::RCP<const MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node> >

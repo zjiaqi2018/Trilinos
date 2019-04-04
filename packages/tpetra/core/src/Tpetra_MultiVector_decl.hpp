@@ -758,12 +758,14 @@ namespace Tpetra {
     /// MultiVector<> X (...); // the input MultiVector
     /// // ... fill X with data ...
     ///
+    /// using Teuchos::RCP;
+    ///
     /// // Map that on each process in X's communicator,
     /// // contains the global indices of the rows of X1.
-    /// Map<> map1 (...);
+    /// RCP<const Map<>> map1 (new Map<> (...));
     /// // Map that on each process in X's communicator,
     /// // contains the global indices of the rows of X2.
-    /// Map<> map2 (...);
+    /// RCP<const Map<>> map2 (new Map<> (...));
     ///
     /// // Create the first view X1.  The second argument, the offset,
     /// // is the index of the local row at which to start the view.
@@ -786,6 +788,16 @@ namespace Tpetra {
     /// number of entries in \c subMap (in this case, zero) and the
     /// offset may equal the number of local entries in
     /// <tt>*this</tt>.
+    MultiVector (const MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node>& X,
+                 const Teuchos::RCP<const map_type>& subMap,
+                 const local_ordinal_type rowOffset = 0);
+
+    /// \brief "Offset view" constructor, that takes the new Map as a
+    ///   <tt>const Map&</tt> rather than by RCP.
+    ///
+    /// This constructor exists for backwards compatibility.  It
+    /// invokes the input Map's copy constructor, which is a shallow
+    /// copy.  Maps are immutable anyway, so the copy is harmless.
     MultiVector (const MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node>& X,
                  const map_type& subMap,
                  const size_t offset = 0);
