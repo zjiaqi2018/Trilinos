@@ -219,8 +219,8 @@ double GraphCreationSettings::getGraphEdgeWeight(stk::topology element1Topology,
         {s, s, s, s, s, s, s}  // super element
     };
 
-    int element1Index = getConnectionTableIndex(element1Topology);
-    int element2Index = getConnectionTableIndex(element2Topology);
+    int element1Index = getEdgeWeightTableIndex(element1Topology);
+    int element2Index = getEdgeWeightTableIndex(element2Topology);
 
     return weightTable[element1Index][element2Index];
 }
@@ -339,6 +339,71 @@ void GraphCreationSettings::setVertexWeightMultiplierForVertexInSearch(double w)
 }
 
 int GraphCreationSettings::getConnectionTableIndex(stk::topology elementTopology) const
+{
+    int tableIndex = -1;
+    switch(elementTopology)
+    {
+        case stk::topology::PARTICLE:
+            tableIndex = 0;
+            break;
+        case stk::topology::LINE_2:
+        case stk::topology::LINE_2_1D:
+        case stk::topology::LINE_3_1D:
+        case stk::topology::BEAM_2:
+        case stk::topology::BEAM_3:
+        case stk::topology::SHELL_LINE_2:
+        case stk::topology::SHELL_LINE_3:
+            tableIndex = 1;
+            break;
+        case stk::topology::TRI_3_2D:
+        case stk::topology::TRI_4_2D:
+        case stk::topology::QUAD_4_2D:
+        case stk::topology::SHELL_TRI_3:
+        case stk::topology::SHELL_TRI_4:
+        case stk::topology::SHELL_QUAD_4:
+            tableIndex = 2;
+            break;
+        case stk::topology::TET_4:
+        case stk::topology::PYRAMID_5:
+        case stk::topology::WEDGE_6:
+        case stk::topology::HEX_8:
+            tableIndex = 3;
+            break;
+        case stk::topology::TRI_6_2D:
+        case stk::topology::QUAD_8_2D:
+        case stk::topology::QUAD_9_2D:
+        case stk::topology::SHELL_TRI_6:
+        case stk::topology::SHELL_QUAD_8:
+        case stk::topology::SHELL_QUAD_9:
+            tableIndex = 4;
+            break;
+        case stk::topology::TET_8:
+        case stk::topology::TET_10:
+        case stk::topology::TET_11:
+        case stk::topology::PYRAMID_13:
+        case stk::topology::PYRAMID_14:
+        case stk::topology::WEDGE_15:
+        case stk::topology::WEDGE_18:
+        case stk::topology::HEX_20:
+        case stk::topology::HEX_27:
+            tableIndex = 5;
+            break;
+        default:
+            if(elementTopology.is_superelement())
+            {
+                tableIndex = 6;
+            }
+            else
+            {
+                std::cerr << "Topology is " << elementTopology << std::endl;
+                throw("Invalid Element Type in GetDimOfElement");
+            }
+            break;
+    };
+    return tableIndex;
+}
+
+int GraphCreationSettings::getEdgeWeightTableIndex(stk::topology elementTopology) const
 {
     int tableIndex = -1;
     switch(elementTopology)

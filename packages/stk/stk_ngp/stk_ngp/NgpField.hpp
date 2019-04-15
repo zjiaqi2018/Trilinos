@@ -411,7 +411,7 @@ private:
         Kokkos::deep_copy(deviceData, hostData);  // Old Kokkos API
         clear_sync_state();                       // Old Kokkos API
 #else
-        fieldData.sync_device();  // New Kokkos API
+        fieldData.sync_to_device();  // New Kokkos API
 #endif
     }
 
@@ -435,7 +435,7 @@ private:
 #ifdef STK_BUILT_IN_SIERRA
         return fieldData.modified_host() > fieldData.modified_device();  // Old Kokkos API
 #else
-        return fieldData.need_sync_device();  // New Kokkos API
+        return fieldData.need_sync_to_device();  // New Kokkos API
 #endif
     }
 

@@ -7,7 +7,7 @@
 #include "internal/balanceCoincidentElements.hpp"
 #include "internal/privateDeclarations.hpp"  // for callZoltan1, etc
 #include "stk_balance/internal/DetectAndFixMechanisms.hpp"
-#include "stk_balance/internal/TransientFieldTransferById.hpp"
+#include "stk_tools/transfer_utils/TransientFieldTransferById.hpp"
 #include "stk_io/StkIoUtils.hpp"
 #include "stk_mesh/base/BulkData.hpp"   // for BulkData
 #include "stk_mesh/base/Comm.hpp"
@@ -260,7 +260,7 @@ void run_static_stk_balance_with_settings(stk::io::StkMeshIoBroker &stkInput, st
     stkOutput.set_bulk_data(*balancedBulk);
     stkOutput.set_attribute_field_ordering_stored_by_part_ordinal(stkInput.get_attribute_field_ordering_stored_by_part_ordinal());
 
-    stk::balance::internal::TransientFieldTransferById transfer(stkInput, stkOutput);
+    stk::transfer_utils::TransientFieldTransferById transfer(stkInput, stkOutput);
     transfer.transfer_and_write_transient_fields(outputFilename);
 
     internal::logMessage(inputBulk.parallel(), "Finished writing output mesh");

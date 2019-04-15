@@ -475,11 +475,12 @@ stk::mesh::FieldVector get_transient_fields(stk::mesh::MetaData &meta, const stk
 const stk::mesh::Part& get_sideset_parent(const stk::mesh::Part& sidesetPart)
 {
     for(stk::mesh::Part * part : sidesetPart.supersets()) {
+        bool hasValidId  = (part->id() != stk::mesh::Part::INVALID_ID);
         bool hasSameId   = (part->id() == sidesetPart.id());
         bool hasSameRank = (part->primary_entity_rank() == sidesetPart.primary_entity_rank());
         bool isIoPart    = stk::io::is_part_io_part(*part);
 
-        if(hasSameId && hasSameRank && isIoPart) {
+        if(hasValidId && hasSameId && hasSameRank && isIoPart) {
             return *part;
         }
     }
