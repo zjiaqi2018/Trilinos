@@ -39,40 +39,14 @@
 // ***********************************************************************
 // @HEADER
 
-#ifndef STOKHOS_MUELU_PRECONDITIONER_HPP
-#define STOKHOS_MUELU_PRECONDITIONER_HPP
+#include "TpetraCore_config.h"
+#ifdef HAVE_TPETRA_EXPLICIT_INSTANTIATION
 
-#include "Teuchos_RCP.hpp"
-#include "Teuchos_ParameterList.hpp"
-#include "Tpetra_MultiVector.hpp"
-#include "MueLu_CreateTpetraPreconditioner.hpp"
+#include "Stokhos_Tpetra_ETI_Helpers_MP_Vector_@ENSEMBLE_SIZE@_@DEVICE@.hpp"
 
-namespace Kokkos {
-namespace Example {
+#include "Tpetra_@CLASS_FILE_NAME@.hpp"
+#include "Tpetra_@CLASS_FILE_NAME@_def.hpp"
 
-  template<class S, class LO, class GO, class N>
-  Teuchos::RCP<Tpetra::Operator<S,LO,GO,N> >
-  build_muelu_preconditioner(const Teuchos::RCP<Tpetra::CrsMatrix<S,LO,GO,N> >& A,
-                             const Teuchos::RCP<Teuchos::ParameterList>& mueluParams,
-                             const Teuchos::RCP<Tpetra::MultiVector<double,LO,GO,N> >& coords)
-  {
-    using Teuchos::RCP;
-    using OperatorType       = Tpetra::Operator<S,LO,GO,N>;
-    using PreconditionerType = MueLu::TpetraOperator<S,LO,GO,N>;
+INSTANTIATE_TPETRA_MP_VECTOR_SD(TPETRA_@UPPER_CASE_CLASS@_INSTANT)
 
-    RCP<OperatorType> A_op = A;
-
-    Teuchos::ParameterList& userList = mueluParams->sublist("user data");
-    if (coords != Teuchos::null) {
-      userList.set<RCP<Tpetra::MultiVector<double,LO,GO,N> > >("Coordinates", coords);
-    }
-    RCP<PreconditionerType> mueluPreconditioner
-      = MueLu::CreateTpetraPreconditioner(A_op, *mueluParams);
-
-    return mueluPreconditioner;
-  }
-
-}
-}
-
-#endif // STOKHOS_MUELU_PRECONDITIONER_HPP
+#endif // HAVE_TPETRA_EXPLICIT_INSTANTIATION

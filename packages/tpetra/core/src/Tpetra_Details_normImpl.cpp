@@ -1,11 +1,12 @@
+/*
 // @HEADER
 // ***********************************************************************
 //
-//                           Stokhos Package
-//                 Copyright (2009) Sandia Corporation
+//          Tpetra: Templated Linear Algebra Services Package
+//                 Copyright (2008) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
+// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
+// the U.S. Government retains certain rights in this software.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -34,45 +35,40 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Questions? Contact Eric T. Phipps (etphipp@sandia.gov).
+// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
 //
-// ***********************************************************************
+// ************************************************************************
 // @HEADER
+*/
 
-#ifndef STOKHOS_MUELU_PRECONDITIONER_HPP
-#define STOKHOS_MUELU_PRECONDITIONER_HPP
+#include "TpetraCore_config.h"
 
-#include "Teuchos_RCP.hpp"
-#include "Teuchos_ParameterList.hpp"
-#include "Tpetra_MultiVector.hpp"
-#include "MueLu_CreateTpetraPreconditioner.hpp"
+#if defined(HAVE_TPETRA_EXPLICIT_INSTANTIATION)
 
-namespace Kokkos {
-namespace Example {
+#include "KokkosCompat_ClassicNodeAPI_Wrapper.hpp"
+#include "Tpetra_Details_normImpl_decl.hpp"
+#include "Tpetra_Details_normImpl_def.hpp"
+#include "TpetraCore_ETIHelperMacros.h"
 
-  template<class S, class LO, class GO, class N>
-  Teuchos::RCP<Tpetra::Operator<S,LO,GO,N> >
-  build_muelu_preconditioner(const Teuchos::RCP<Tpetra::CrsMatrix<S,LO,GO,N> >& A,
-                             const Teuchos::RCP<Teuchos::ParameterList>& mueluParams,
-                             const Teuchos::RCP<Tpetra::MultiVector<double,LO,GO,N> >& coords)
-  {
-    using Teuchos::RCP;
-    using OperatorType       = Tpetra::Operator<S,LO,GO,N>;
-    using PreconditionerType = MueLu::TpetraOperator<S,LO,GO,N>;
+namespace Tpetra {
 
-    RCP<OperatorType> A_op = A;
+  TPETRA_ETI_MANGLING_TYPEDEFS()
 
-    Teuchos::ParameterList& userList = mueluParams->sublist("user data");
-    if (coords != Teuchos::null) {
-      userList.set<RCP<Tpetra::MultiVector<double,LO,GO,N> > >("Coordinates", coords);
-    }
-    RCP<PreconditionerType> mueluPreconditioner
-      = MueLu::CreateTpetraPreconditioner(A_op, *mueluParams);
+  TPETRA_INSTANTIATE_SN( TPETRA_DETAILS_NORMIMPL_INSTANT )
 
-    return mueluPreconditioner;
-  }
+#ifdef HAVE_TPETRA_INST_CUDA
 
-}
-}
+  using cuda_host_mirror_device_type =
+    Kokkos::Device<Kokkos::DefaultHostExecutionSpace,
+                   Kokkos::CudaUVMSpace>;
 
-#endif // STOKHOS_MUELU_PRECONDITIONER_HPP
+#define TPETRA_DETAILS_NORMIMPL_INSTANT_CUDAHOSTMIRROR( S ) \
+  TPETRA_DETAILS_NORMIMPL_INSTANT( S, cuda_host_mirror_device_type )
+
+  TPETRA_INSTANTIATE_S( TPETRA_DETAILS_NORMIMPL_INSTANT_CUDAHOSTMIRROR )
+
+#endif // HAVE_TPETRA_INST_CUDA
+
+} // namespace Tpetra
+
+#endif // Whether we should build this specialization
