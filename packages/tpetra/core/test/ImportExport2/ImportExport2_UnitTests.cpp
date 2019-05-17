@@ -656,6 +656,7 @@ namespace {
           Tpetra::sort2 (curInds.begin (), curInds.end (), curVals.begin ());
 
           for (decltype (rowinds.size()) j=0; j<rowinds.size(); ++j) {
+            std::cout << "HERE I AM A.0: A(" << globalrow << "," << curInds[j] << ") = " << curVals[j] << "\n";
             TEST_EQUALITY( curInds[j], as<GO> (j) );
             TEST_EQUALITY( curVals[j], as<Scalar> (j)  );
           }
