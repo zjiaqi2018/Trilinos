@@ -5789,8 +5789,8 @@ namespace Tpetra {
     using padding_type = Kokkos::UnorderedMap<LO, size_t, device_type>;
     padding_type padding (numSameIDs + permuteFromLIDs.extent (0));
 
-    computeCrsPaddingForSameIDs(padding, source, numSameIDs, true);
-    computeCrsPaddingForPermutedIDs(padding, source, permuteToLIDs, permuteFromLIDs, true);
+    computeCrsPaddingForSameIDs(padding, source, numSameIDs, false);
+    computeCrsPaddingForPermutedIDs(padding, source, permuteToLIDs, permuteFromLIDs, false);
 
     using execution_space = typename device_type::execution_space;
     execution_space::fence ();  // Make sure device sees changes made by host

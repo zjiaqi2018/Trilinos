@@ -83,7 +83,7 @@ pad_crs_arrays(
     return;
   }
 
-  auto pad_values = values.extent(0) > 0;
+  auto pad_values = values.extent(0) == indices.extent(0);
 
   // Determine if the indices array is large enough
   auto num_row = row_ptr_beg.size() - 1;
@@ -123,7 +123,6 @@ pad_crs_arrays(
   // The indices array must be resized and the row_ptr arrays shuffled
   auto indices_new = uninitialized_view<Indices>("ind new", indices.size()+additional_size_needed);
   auto values_new = uninitialized_view<Values>("val new", pad_values ? values.size()+additional_size_needed : 0);
-  Kokkos::deep_copy(values, Teuchos::ScalarTraits<typename Values::value_type>::zero());
 
   // mfh: Not so fussy about this not being a kernel initially,
   // since we're adding a new feature upon which existing code does not rely,

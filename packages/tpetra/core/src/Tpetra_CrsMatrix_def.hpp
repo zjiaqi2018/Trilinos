@@ -2129,11 +2129,14 @@ namespace Tpetra {
 
     if (this->getProfileType () == StaticProfile) {
       Teuchos::ArrayView<IST> valsView = this->getViewNonConst(rowInfo);
+      std::cout << "HERE I AM P.0: " << valsView.size() << ", " << numInputEnt << "\n";
       auto fun = [&](size_t const k, size_t const /*start*/, size_t const offset) {
-                   valsView[offset] += vals[k]; };
+                   valsView[offset] += vals[k];
+                   };
       std::function<void(size_t const, size_t const, size_t const)> cb(std::ref(fun));
       auto numInserted =
         graph.insertGlobalIndicesImpl(rowInfo, gblColInds, numInputEnt, cb);
+      std::cout << "HERE I AM P.1\n";
       newNumEnt = curNumEnt + numInserted;
     }
     else {
@@ -6628,12 +6631,14 @@ namespace Tpetra {
     using range_policy = Kokkos::RangePolicy<execution_space, Kokkos::IndexType<LocalOrdinal>>;
     using Tpetra::Details::padCrsArrays;
 
-    if (padding.size() == 0)
-      return;
+    const char tfecfFuncName[] = "applyCrsPadding: ";
 
     if (! myGraph_->indicesAreAllocated ()) {
       this->allocateValues (GlobalIndices, GraphNotYetAllocated);
     }
+
+    if (padding.size() == 0)
+      return;
 
     // Making copies here because k_rowPtrs_ has a const type. Otherwise, we
     // would use it directly.
@@ -6669,6 +6674,7 @@ namespace Tpetra {
     using values_type = typename local_matrix_type::values_type;
     values_type values("values", k_values1D_.size());
     Kokkos::deep_copy(values, k_values1D_);
+    std::cout << "HERE I AM: PADDING: " << values.size() << ", " << padding.size() << " " << row_ptrs_beg.size() << "\n";
     if(myGraph_->isGloballyIndexed()) {
       using indices_type = typename crs_graph_type::t_GlobalOrdinal_1D;
       indices_type indices("indices", myGraph_->k_gblInds1D_.extent(0));
@@ -6676,6 +6682,10 @@ namespace Tpetra {
       using padding_type = Kokkos::UnorderedMap<LocalOrdinal, size_t, device_type>;
       padCrsArrays<row_ptrs_type,indices_type,values_type,padding_type>(row_ptrs_beg, row_ptrs_end, indices, values, padding);
       myGraph_->k_gblInds1D_ = indices;
+      TEUCHOS_TEST_FOR_EXCEPTION_CLASS_FUNC(
+          values.size() != indices.size(),
+          std::logic_error,
+          "After padding, values and indices should be same size");
     }
     else {
       using indices_type = typename local_graph_type::entries_type::non_const_type;
@@ -6684,6 +6694,10 @@ namespace Tpetra {
       using padding_type = Kokkos::UnorderedMap<LocalOrdinal, size_t, device_type>;
       padCrsArrays<row_ptrs_type,indices_type,values_type,padding_type>(row_ptrs_beg, row_ptrs_end, indices, values, padding);
       myGraph_->k_lclInds1D_ = indices;
+      TEUCHOS_TEST_FOR_EXCEPTION_CLASS_FUNC(
+          values.size() != indices.size(),
+          std::logic_error,
+          "After padding, values and indices should be same size");
     }
 
     if (refill_num_row_entries) {
@@ -6696,6 +6710,7 @@ namespace Tpetra {
     }
     myGraph_->k_rowPtrs_ = row_ptrs_beg;
     k_values1D_ = values;
+    std::cout << "HERE I AM: PADDING DONE: " << values.size() << "\n";
   }
 
   template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
@@ -7817,6 +7832,7 @@ namespace Tpetra {
 
     if (!this->isStaticGraph() && this->getProfileType() == StaticProfile) {
       auto padding = myGraph_->computeCrsPadding(importLIDs, numPacketsPerLID);
+      // FIXME: TJF uncomment below and some tests fail
       if (padding.size() > 0)
         this->applyCrsPadding(padding);
     }
