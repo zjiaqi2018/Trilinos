@@ -77,6 +77,8 @@ namespace MueLu {
 
     AvatarInterface(Teuchos::RCP<const Teuchos::Comm<int> >& comm, Teuchos::ParameterList& inParams):comm_(comm),params_(inParams){};
 
+    ~AvatarInterface() {Cleanup();}
+
     Teuchos::RCP<const Teuchos::ParameterList> GetValidParameterList() const;
 
     // Sets the input parameters for the AvatarInterface
@@ -93,7 +95,7 @@ namespace MueLu {
 
     // Returns 1 if the given parameters are within same 
     // same domain as training data, 0 otherwise
-    int checkBounds(std::string trialString, Teuchos::ArrayRCP<std::string> boundsString) const;
+    int checkBounds(std::string trialString, const Teuchos::Array<std::string> &boundsString) const;
 
     int hybrid(float * probabilities, std::vector<int> acceptableCombos) const; 
 
@@ -105,7 +107,7 @@ namespace MueLu {
 
   private:
     // Utility functions
-    Teuchos::ArrayRCP<std::string> ReadFromFiles(const char * param_name) const;
+    void ReadFromFiles(const char * param_name, Teuchos::Array<std::string>& outputArray) const;
     void GenerateFeatureString(const Teuchos::ParameterList & problemFeatures, std::string & featureString) const;
     std::string ParamsToString(const std::vector<int> & indices) const;
     void SetIndices(int id,std::vector<int> & indices) const;
@@ -115,10 +117,10 @@ namespace MueLu {
     // Cached data
     Teuchos::RCP<const Teuchos::Comm<int> > comm_;
     mutable Teuchos::ParameterList params_; // The mutable is a hack to deal with issues in Teuchos
-    Teuchos::ArrayRCP<std::string> avatarStrings_;
-    Teuchos::ArrayRCP<std::string> namesStrings_;
+    Teuchos::Array<std::string> avatarStrings_;
+    Teuchos::Array<std::string> namesStrings_;
     Teuchos::Array<std::string> filestem_;
-    Teuchos::ArrayRCP<std::string> boundsString_;
+    Teuchos::Array<std::string> boundsString_;
     int avatarGoodClass_;
     int heuristicToUse_;
 

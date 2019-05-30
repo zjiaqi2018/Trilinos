@@ -108,12 +108,13 @@ RCP<const ParameterList> AvatarInterface::GetValidParameterList() const {
   Teuchos::Array<std::string> ar_dummy;
   int int_dummy;
 
-  // Files from which to read Avatar trees
+  // Files/String from which to read Avatar trees
   validParamList->set<Teuchos::Array<std::string> >("avatar: decision tree files",ar_dummy,"Names of Avatar decision tree files");
+  validParamList->set<Teuchos::Array<std::string> >("avatar: decision tree strings",ar_dummy,"Avatar decision tree strings");
 
-  // Files from which to read Avatar names
+  // Files/String from which to read Avatar names
   validParamList->set<Teuchos::Array<std::string> >("avatar: names files",ar_dummy,"Names of Avatar decision names files");
-
+  validParamList->set<Teuchos::Array<std::string> >("avatar: names strings",ar_dummy,"Avatar decision names strings");
   // Filestem arg for Avatar
   validParamList->set<Teuchos::Array<std::string> >("avatar: filestem",ar_dummy,"Filestem for the files Avatar requires");
 
@@ -140,10 +141,9 @@ RCP<const ParameterList> AvatarInterface::GetValidParameterList() const {
 
 
 // ***********************************************************************
-Teuchos::ArrayRCP<std::string> AvatarInterface::ReadFromFiles(const char * paramName) const {
+void AvatarInterface::ReadFromFiles(const char * paramName, Teuchos::Array<std::string> & treelist) const {
   //  const Teuchos::Array<std::string> & tf = params_.get<const Teuchos::Array<std::string> >(paramName);
   Teuchos::Array<std::string> & tf = params_.get<Teuchos::Array<std::string> >(paramName);
-  Teuchos::ArrayRCP<std::string> treelist;
   // Only Proc 0 will read the files and print the strings
   if (comm_->getRank() == 0) {
     treelist.resize(tf.size());
@@ -156,9 +156,7 @@ Teuchos::ArrayRCP<std::string> AvatarInterface::ReadFromFiles(const char * param
       file.close();
     }
   }
-  return treelist;
 }
-
 
 
 // ***********************************************************************
@@ -167,10 +165,23 @@ void AvatarInterface::Setup() {
   if(comm_.is_null()) throw std::runtime_error("MueLu::AvatarInterface::Setup(): Communicator cannot be null");
 
   // Get the avatar strings (NOTE: Only exist on proc 0)
-  avatarStrings_ = ReadFromFiles("avatar: decision tree files");
-  namesStrings_  = ReadFromFiles("avatar: names files");
+  if(params_.isParameter("avatar: decision tree files"))
+    ReadFromFiles("avatar: decision tree files",avatarStrings_);
+  else if(params_.isParameter("avatar: decision tree strings"))
+    avatarStrings_ = params_.get<Teuchos::Array<std::string> >("avatar: decision tree strings");
+  else 
+    throw std::runtime_error("MueLu::AvatarInterface::Setup(): Decision trees are not be specified.");
+      
+      if(params_.isParameter("avatar: names files"))
+    ReadFromFiles("avatar: names files",namesStrings_);
+  else if(params_.isParameter("avatar: names files"))    
+    namesStrings_ = params_.get<Teuchos::Array<std::string> >("avatar: names strings");
+  else
+    throw std::runtime_error("MueLu::AvatarInterface::Setup(): Names are not be specified.");
+
+
   if(params_.isParameter("avatar: bounds file"))
-    boundsString_ = ReadFromFiles("avatar: bounds file");
+    ReadFromFiles("avatar: bounds file",boundsString_);
 
   filestem_ = params_.get<Teuchos::Array<std::string>>("avatar: filestem");
 
@@ -419,7 +430,7 @@ void AvatarInterface::SetMueLuParameters(const Teuchos::ParameterList & problemF
 
 }
 
-int AvatarInterface::checkBounds(std::string trialString, Teuchos::ArrayRCP<std::string> boundsString) const {
+int AvatarInterface::checkBounds(std::string trialString, const Teuchos::Array<std::string> &boundsString) const {
   std::stringstream ss(trialString);
   std::vector<double> vect;
 
