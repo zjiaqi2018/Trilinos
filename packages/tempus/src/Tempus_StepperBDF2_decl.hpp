@@ -11,6 +11,7 @@
 
 #include "Tempus_StepperImplicit.hpp"
 #include "Tempus_WrapperModelEvaluator.hpp"
+#include "Tempus_StepperObserverComposite.hpp"
 #include "Tempus_StepperBDF2Observer.hpp"
 
 
@@ -69,6 +70,9 @@ public:
   //@{
     virtual void setObserver(
       Teuchos::RCP<StepperObserver<Scalar> > obs = Teuchos::null);
+
+    virtual Teuchos::RCP<StepperObserver<Scalar> > getObserver() const
+    { return this->stepperObserver_; }
 
     /// Set the stepper to use in first step
     void setStartUpStepper(std::string startupStepperName);
@@ -130,9 +134,10 @@ public:
 
 private:
 
-  Teuchos::RCP<Stepper<Scalar> >             startUpStepper_;
-  Teuchos::RCP<StepperBDF2Observer<Scalar> > stepperBDF2Observer_;
-  Scalar                                     order_;
+  Teuchos::RCP<Stepper<Scalar> >                     startUpStepper_;
+  Teuchos::RCP<StepperObserverComposite<Scalar> >    stepperObserver_;
+  Teuchos::RCP<StepperBDF2Observer<Scalar> >         stepperBDF2Observer_;
+  Scalar                                             order_;
 };
 
 /** \brief Time-derivative interface for BDF2.

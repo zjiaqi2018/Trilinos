@@ -12,8 +12,7 @@
 #include "Tempus_config.hpp"
 #include "Tempus_StepperExplicit.hpp"
 #include "Tempus_RKButcherTableau.hpp"
-#include "Tempus_StepperObserverComposite.hpp"
-#include "Tempus_StepperExplicitRKObserverComposite.hpp"
+#include "Tempus_StepperRKObserverComposite.hpp"
 
 
 namespace Tempus {
@@ -122,6 +121,9 @@ public:
     virtual void setObserver(
       Teuchos::RCP<StepperObserver<Scalar> > obs = Teuchos::null);
 
+    virtual Teuchos::RCP<StepperObserver<Scalar> > getObserver() const
+    { return this->stepperObserver_; }
+
     virtual void setTableau(std::string stepperType);
 
     virtual void setTableau(
@@ -182,19 +184,18 @@ public:
 
 protected:
 
-  Teuchos::RCP<const RKButcherTableau<Scalar> >          ERK_ButcherTableau_;
+  Teuchos::RCP<const RKButcherTableau<Scalar> >              ERK_ButcherTableau_;
 
-  std::vector<Teuchos::RCP<Thyra::VectorBase<Scalar> > > stageXDot_;
-  Teuchos::RCP<Thyra::VectorBase<Scalar> >               stageX_;
+  std::vector<Teuchos::RCP<Thyra::VectorBase<Scalar> > >     stageXDot_;
+  Teuchos::RCP<Thyra::VectorBase<Scalar> >                   stageX_;
 
-  Teuchos::RCP<StepperObserverComposite<Scalar> >    stepperObserver_;
-  Teuchos::RCP<StepperExplicitRKObserverComposite<Scalar> >  stepperExplicitRKObserver_;
+  Teuchos::RCP<StepperRKObserverComposite<Scalar> >          stepperObserver_;
 
   // For Embedded RK
-  Teuchos::RCP<Thyra::VectorBase<Scalar> >               ee_;
-  Teuchos::RCP<Thyra::VectorBase<Scalar> >               abs_u0;
-  Teuchos::RCP<Thyra::VectorBase<Scalar> >               abs_u;
-  Teuchos::RCP<Thyra::VectorBase<Scalar> >               sc;
+  Teuchos::RCP<Thyra::VectorBase<Scalar> >                   ee_;
+  Teuchos::RCP<Thyra::VectorBase<Scalar> >                   abs_u0;
+  Teuchos::RCP<Thyra::VectorBase<Scalar> >                   abs_u;
+  Teuchos::RCP<Thyra::VectorBase<Scalar> >                   sc;
 
 };
 

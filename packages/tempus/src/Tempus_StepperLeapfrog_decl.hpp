@@ -11,6 +11,7 @@
 
 #include "Tempus_config.hpp"
 #include "Tempus_StepperExplicit.hpp"
+#include "Tempus_StepperObserverComposite.hpp"
 #include "Tempus_StepperLeapfrogObserver.hpp"
 
 
@@ -96,6 +97,9 @@ public:
     virtual void setObserver(
       Teuchos::RCP<StepperObserver<Scalar> > obs = Teuchos::null);
 
+    virtual Teuchos::RCP<StepperObserver<Scalar> > getObserver() const
+    { return this->stepperObserver_; }
+
     /// Initialize during construction and after changing input parameters.
     virtual void initialize();
 
@@ -147,6 +151,7 @@ public:
 
 protected:
 
+  Teuchos::RCP<StepperObserverComposite<Scalar> >    stepperObserver_;
   Teuchos::RCP<StepperLeapfrogObserver<Scalar> >     stepperLFObserver_;
 
 };
