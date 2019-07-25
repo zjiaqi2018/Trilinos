@@ -126,6 +126,7 @@ namespace MueLu {
     if (name == "problem: symmetric") { ss << "<Parameter name=\"problem: symmetric\" type=\"bool\" value=" << value << "/>"; return ss.str(); }      
     if (name == "hierarchy label") { ss << "<Parameter name=\"hierarchy label\" type=\"string\" value=" << value << "/>"; return ss.str(); }      
     if (name == "aggregation: drop tol") { ss << "<Parameter name=\"aggregation: drop tol\" type=\"double\" value=" << value << "/>"; return ss.str(); }      
+    if (name == "aggregation: row sum drop tol") { ss << "<Parameter name=\"aggregation: row sum drop tol\" type=\"double\" value=" << value << "/>"; return ss.str(); }      
     if (name == "print initial parameters") { ss << "<Parameter name=\"print initial parameters\" type=\"bool\" value=" << value << "/>"; return ss.str(); }      
     if (name == "print unused parameters") { ss << "<Parameter name=\"print unused parameters\" type=\"bool\" value=" << value << "/>"; return ss.str(); }      
     if (name == "sa: damping factor") { ss << "<Parameter name=\"sa: damping factor\" type=\"double\" value=" << value << "/>"; return ss.str(); }      
@@ -187,6 +188,7 @@ namespace MueLu {
   "<Parameter name=\"aggregation: ordering\" type=\"string\" value=\"natural\"/>"
   "<Parameter name=\"aggregation: drop scheme\" type=\"string\" value=\"classical\"/>"
   "<Parameter name=\"aggregation: drop tol\" type=\"double\" value=\"0.0\"/>"
+  "<Parameter name=\"aggregation: row sum drop tol\" type=\"double\" value=\"-1.0\"/>"
   "<Parameter name=\"aggregation: min agg size\" type=\"int\" value=\"2\"/>"
   "<Parameter name=\"aggregation: max agg size\" type=\"int\" value=\"-1\"/>"
   "<Parameter name=\"aggregation: brick x size\" type=\"int\" value=\"2\"/>"
@@ -538,6 +540,8 @@ namespace MueLu {
          ("aggregation: drop scheme","aggregation: drop scheme")
       
          ("aggregation: threshold","aggregation: drop tol")
+      
+         ("aggregation: row sum drop tol","aggregation: row sum drop tol")
       
          ("aggregation: min agg size","aggregation: min agg size")
       

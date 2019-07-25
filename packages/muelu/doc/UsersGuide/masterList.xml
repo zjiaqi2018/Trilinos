@@ -387,6 +387,14 @@
     </parameter>
 
     <parameter>
+      <name>aggregation: row sum drop tol</name>
+      <type>double</type>
+      <default>-1.0</default>
+      <description>Row sum based dropping threshold for a graph used in aggregation.</description>
+      <name-ML>aggregation: row sum drop tol</name-ML>
+    </parameter>
+
+    <parameter>
       <name>aggregation: min agg size</name>
       <type>int</type>
       <default>2</default>

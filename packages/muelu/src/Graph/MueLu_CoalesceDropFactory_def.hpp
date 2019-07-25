@@ -83,6 +83,7 @@ namespace MueLu {
     SET_VALID_ENTRY("aggregation: drop tol");
     SET_VALID_ENTRY("aggregation: Dirichlet threshold");
     SET_VALID_ENTRY("aggregation: drop scheme");
+    SET_VALID_ENTRY("aggregation: row sum drop tol");
     {
       typedef Teuchos::StringToIntegralParameterEntryValidator<int> validatorType;
       validParamList->getEntry("aggregation: drop scheme").setValidator(
@@ -154,6 +155,10 @@ namespace MueLu {
       GetOStream(Runtime0) << "algorithm = \"" << algo << "\": threshold = " << threshold << ", blocksize = " << A->GetFixedBlockSize() << std::endl;
       Set(currentLevel, "Filtering", (threshold != STS::zero()));
 
+      double rowsumTol = as<double>(pL.get<double>("aggregation: row sum drop tol"));
+      if (rowsumTol < Teuchos::ScalarTraits<double>::zero())
+        rowsumTol = Teuchos::ScalarTraits<double>::rmax();
+
       const typename STS::magnitudeType dirichletThreshold = STS::magnitude(as<SC>(pL.get<double>("aggregation: Dirichlet threshold")));
 
       GO numDropped = 0, numTotal = 0;
@@ -207,6 +212,8 @@ namespace MueLu {
           //                                          graph's map information, e.g., whether index is local
           // OR a matrix without a CrsGraph
 
+          std::cout << "this branch\n";
+
           // allocate space for the local graph
           ArrayRCP<LO> rows   (A->getNodeNumRows()+1);
           ArrayRCP<LO> columns(A->getNodeNumEntries());
@@ -228,6 +235,28 @@ namespace MueLu {
             //FIXME    if(std::abs(vals[k]) > std::abs(threshold_) || grow == gcid )
             //FIXME but the threshold doesn't take into account the rows' diagonal entries
             //FIXME For now, hardwiring the dropping in here
+
+            SC rowsum = STS::zero();
+            SC diagval = STS::zero();
+            LO diagcol = 0;
+            for (LO colID = 0; colID < Teuchos::as<LO>(nnz); colID++) {
+              LO col = indices[colID];
+              if (row == col) {
+                diagval = vals[colID];
+                diagcol = col;
+              }
+              rowsum += vals[colID];
+            }
+            if (rowsumTol < 10.0)
+              std::cout << rowsum << " " << diagval << std::endl;
+            if (STS::magnitude(rowsum) > STS::magnitude(diagval) * rowsumTol) {
+              boundaryNodes[row] = true;
+              columns[realnnz++] = diagcol;
+              rows[row+1] = realnnz;
+              numDropped += nnz-1;
+              std::cout << "Dropping\n";
+              continue;
+            }
 
             LO rownnz = 0;
             for (LO colID = 0; colID < Teuchos::as<LO>(nnz); colID++) {
@@ -799,6 +828,9 @@ namespace MueLu {
       //what Tobias has implemented
 
       SC threshold = as<SC>(pL.get<double>("aggregation: drop tol"));
+      double rowsumTol = as<double>(pL.get<double>("aggregation: row sum drop tol"));
+      if (rowsumTol < Teuchos::ScalarTraits<double>::zero())
+        rowsumTol = Teuchos::ScalarTraits<double>::rmax();
       //GetOStream(Runtime0) << "algorithm = \"" << algo << "\": threshold = " << threshold << ", blocksize = " << A->GetFixedBlockSize() << std::endl;
       GetOStream(Runtime0) << "algorithm = \"" << "failsafe" << "\": threshold = " << threshold << ", blocksize = " << A->GetFixedBlockSize() << std::endl;
       Set(currentLevel, "Filtering", (threshold != STS::zero()));
@@ -856,6 +888,8 @@ namespace MueLu {
 
         RCP<std::vector<GO> > cnodeIds = Teuchos::rcp(new std::vector<GO>);  // global column block ids
         LO realnnz = 0;
+        SC rowsum = STS::zero();
+        SC diagval = STS::zero();
         for(LO col=0; col<Teuchos::as<LO>(nnz); col++) {
           GO gcid = colMap->getGlobalElement(indices[col]); // global column id
 
@@ -863,11 +897,16 @@ namespace MueLu {
             GO cnodeId = AmalgamationFactory::DOFGid2NodeId(gcid, blockdim, offset, indexBase);
             cnodeIds->push_back(cnodeId);
             realnnz++; // increment number of nnz in matrix row
-            if (grid == gcid) bIsDiagonalEntry = true;
+            rowsum += vals[col];
+            if (grid == gcid) {
+              bIsDiagonalEntry = true;
+              diagval = vals[col];
+            }
           }
         }
 
-        if(realnnz == 1 && bIsDiagonalEntry == true) {
+        if ((realnnz == 1 && bIsDiagonalEntry == true) ||
+            (STS::magnitude(rowsum) > STS::magnitude(diagval) * rowsumTol)) {
           LO lNodeId = nodeMap->getLocalElement(nodeId);
           numberDirichletRowsPerNode[lNodeId] += 1;      // increment Dirichlet row counter associated with lNodeId
           if (numberDirichletRowsPerNode[lNodeId] == blockdim) // mark full Dirichlet nodes

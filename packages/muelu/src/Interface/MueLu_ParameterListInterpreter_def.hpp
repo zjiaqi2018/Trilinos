@@ -930,6 +930,7 @@ namespace MueLu {
       dropParams.set("lightweight wrap", true);
       MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: drop scheme",     std::string, dropParams);
       MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: drop tol",             double, dropParams);
+      MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: row sum drop tol",     double, dropParams);
       MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "aggregation: Dirichlet threshold",  double, dropParams);
       if (useKokkos_) {
         MUELU_TEST_AND_SET_PARAM_2LIST(paramList, defaultList, "filtered matrix: use lumping",      bool, dropParams);
