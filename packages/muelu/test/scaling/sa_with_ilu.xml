@@ -1,4 +1,7 @@
 <ParameterList name="MueLu">
+
+  <Parameter        name="number of reruns"                  type="int"      value="0"/>
+
   <Parameter        name="verbosity"                            type="string"   value="high"/>
 
   <Parameter        name="number of equations"                  type="int"      value="1"/>
