@@ -254,6 +254,7 @@ int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int ar
 #ifdef HAVE_MPI
   int provideNodeComm = 0;                            clp.setOption("nodecomm",          &provideNodeComm,  "make the nodal communicator available w/ reduction factor X");
 #endif
+  bool        gdb = false; clp.setOption("gdb", "nogdb", &gdb, "pause for gdb");
 
   clp.recogniseAllOptions(true);
   switch (clp.parse(argc, argv)) {
@@ -563,8 +564,56 @@ MueLu::MueLu_AMGX_finalize();
 
 //- -- --------------------------------------------------------
 #define MUELU_AUTOMATIC_TEST_ETI_NAME main_
+#define JHU_LOOP_FOREVER
 #include "MueLu_Test_ETI.hpp"
 
 int main(int argc, char *argv[]) {
-  return Automatic_Test_ETI(argc,argv);
+#ifndef JHU_LOOP_FOREVER
+    return Automatic_Test_ETI(argc,argv);
+#else
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL);
+# ifdef HAVE_MUELU_KOKKOSCORE
+  Kokkos::initialize(argc, argv);
+# endif
+      Teuchos::RCP<const Teuchos::Comm<int> > comm = Teuchos::DefaultComm<int>::getComm();
+/////////////////////////////////
+    Teuchos::CommandLineProcessor clp(false);
+    bool        gdb = false; clp.setOption("gdb", "nogdb", &gdb, "pause for gdb");
+
+    clp.recogniseAllOptions(false);
+    switch (clp.parse(argc, argv, NULL)) {
+      case Teuchos::CommandLineProcessor::PARSE_ERROR:                return EXIT_FAILURE;
+      case Teuchos::CommandLineProcessor::PARSE_UNRECOGNIZED_OPTION:
+      case Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL:
+      case Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED:         break;
+    }
+/////////////////////////////////
+
+      if (gdb) {
+        int myPID = comm->getRank();
+        int pid   = getpid();
+        char hostname[80];
+        for (int i = 0; i <comm->getSize(); i++) {
+          if (i == myPID) {
+            gethostname(hostname, sizeof(hostname));
+            std::cout << "Host: " << hostname << "\tMPI rank: " << myPID << ",\tPID: " << pid << "\n\tattach " << pid << std::endl;
+            sleep(1);
+          }
+        }
+        if (myPID == 0) {
+          std::cout << "** Enter a character to continue > " << std::endl;
+          char go = ' ';
+          int r = scanf("%c", &go);
+          (void)r;
+          assert(r > 0);
+        }
+      } //if (gdb)
+      comm->barrier();
+  do 
+    Automatic_Test_ETI(argc,argv);
+  while (true);
+# ifdef HAVE_MUELU_KOKKOSCORE
+  Kokkos::finalize();
+# endif
+#endif //ifndef JHU_LOOP_FOREVER
 }

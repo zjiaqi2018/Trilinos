@@ -82,6 +82,7 @@ bool Automatic_Test_ETI(int argc, char *argv[]) {
   using MueLu::Exceptions::RuntimeError;
 
   // MPI initialization using Teuchos
+#ifndef JHU_LOOP_FOREVER
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL);
 
   // Tpetra nodes call Kokkos::execution_space::initialize if the execution
@@ -93,6 +94,7 @@ bool Automatic_Test_ETI(int argc, char *argv[]) {
   // processes correctly before Kokkos touches things.
 #ifdef HAVE_MUELU_KOKKOSCORE
   Kokkos::initialize(argc, argv);
+#endif
 #endif
 
   bool success = true;
@@ -284,8 +286,10 @@ bool Automatic_Test_ETI(int argc, char *argv[]) {
   }
   TEUCHOS_STANDARD_CATCH_STATEMENTS(verbose, std::cerr, success);
 
+#ifdef JHU_NOSKIP
 #ifdef HAVE_MUELU_KOKKOSCORE
   Kokkos::finalize();
+#endif
 #endif
 
   return ( success ? EXIT_SUCCESS : EXIT_FAILURE );

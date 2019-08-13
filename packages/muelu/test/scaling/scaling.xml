@@ -4,6 +4,8 @@
     For a generic symmetric scalar problem, these are the recommended settings for MueLu.
   -->
 
+  <Parameter        name="number of reruns"                  type="int"      value="0"/>
+
   <!-- ===========  GENERAL ================ -->
     <Parameter        name="verbosity"                            type="string"   value="high"/>
 
