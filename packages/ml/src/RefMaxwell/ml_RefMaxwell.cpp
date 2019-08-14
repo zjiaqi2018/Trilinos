@@ -393,7 +393,8 @@ int ML_Epetra::RefMaxwellPreconditioner::ComputePreconditioner(const bool /* Che
     if(verbose_ && !Comm_->MyPID()) printf("EMFP: Aggregating with M1\n");
   }
   // Nuke Dirichlet / Rowsum rows of TMT_Agg_Matrix
-  Apply_BCsToMatrixRows(dirichletNodes11.data(),dirichletNodes11.size(),*TMT_Agg_Matrix_);
+  // Glusa doesn't seem to be doing this in MueLu???
+  //  Apply_BCsToMatrixRows(dirichletNodes11.data(),dirichletNodes11.size(),*TMT_Agg_Matrix_);
 
   Remove_Zeroed_Rows(*TMT_Agg_Matrix_);
 
