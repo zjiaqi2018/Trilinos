@@ -81,8 +81,8 @@ bool worthBuildingFixedHashTableInParallel () {
 //  KDD 8/19:  reproducible of the errors.  We'll reverse this as we debug
 //  KDD 8/19:  the problem, but this temporary fix may allow users to make 
 //  KDD 8/19:  progress toward their milestones.
-//  return ExecSpace::concurrency() > 1;
-    return false;
+  return ExecSpace::concurrency() > 1;
+//    return false;
 //  KDD 8/19
 }
 
