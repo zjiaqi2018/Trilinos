@@ -242,44 +242,22 @@ void Multiply(
   if (!use_optimized_ATB)
     MMdetails::import_and_extract_views(*Bprime, targetMap_B, Bview, Aprime->getGraph()->getImporter(), false, label, params);
 
-#ifdef HAVE_TPETRA_MMM_TIMINGS
   }
-  TimeMonitor MM3(*TimeMonitor::getNewTimer(prefix_mmm + std::string("MMM All Multiply")));
-  {
+#ifdef HAVE_TPETRA_MMM_TIMINGS
+  //stop the Setup timer and start the Multiply timer
+  MM = *TimeMonitor::getNewTimer(prefix_mmm + std::string("MMM All Multiply"));
 #endif
 
   // Call the appropriate method to perform the actual multiplication.
   if (use_optimized_ATB) {
     MMdetails::mult_AT_B_newmatrix(A, B, C, label,params);
-
-  } else if (call_FillComplete_on_result && newFlag) {
+  } else if (newFlag) {
     MMdetails::mult_A_B_newmatrix(Aview, Bview, C, label,params);
-
-  } else if (call_FillComplete_on_result) {
-    MMdetails::mult_A_B_reuse(Aview, Bview, C, label,params);
-
   } else {
-    // mfh 27 Sep 2016: Is this the "slow" case?  This
-    // "CrsWrapper_CrsMatrix" thing could perhaps be made to support
-    // thread-parallel inserts, but that may take some effort.
-    CrsWrapper_CrsMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> crsmat(C);
-
-    MMdetails::mult_A_B(Aview, Bview, crsmat, label,params);
-
-#ifdef HAVE_TPETRA_MMM_TIMINGS
-  }
-    TimeMonitor MM4(*TimeMonitor::getNewTimer(prefix_mmm + std::string("MMM All FillComplete")));
-#endif
-    if (call_FillComplete_on_result) {
-      // We'll call FillComplete on the C matrix before we exit, and give it a
-      // domain-map and a range-map.
-      // The domain-map will be the domain-map of B, unless
-      // op(B)==transpose(B), in which case the range-map of B will be used.
-      // The range-map will be the range-map of A, unless op(A)==transpose(A),
-      // in which case the domain-map of A will be used.
-      if (!C.isFillComplete())
-        C.fillComplete(Bprime->getDomainMap(), Aprime->getRangeMap());
-    }
+    MMdetails::mult_A_B_reuse(Aview, Bview, C, label,params);
+  } 
+  if(!call_FillComplete_on_result) {
+    C.resumeFill();
   }
 }
 
