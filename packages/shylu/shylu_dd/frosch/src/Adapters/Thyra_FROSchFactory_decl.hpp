@@ -136,6 +136,8 @@ namespace Thyra {
         using ConstXMultiVector             = const XMultiVector;
         using XMultiVectorPtr               = RCP<XMultiVector>;
         using ConstXMultiVectorPtr          = RCP<ConstXMultiVector>;
+        using ConstXMultiVectorPtrVecPtr    = ArrayRCP<ConstXMultiVectorPtr>;
+        using XMultiVectorPtrVecPtr         = ArrayRCP<XMultiVectorPtr>;
         
         using ParameterListPtr              = RCP<ParameterList>;
         using ConstParameterListPtr         = RCP<const ParameterList>;
