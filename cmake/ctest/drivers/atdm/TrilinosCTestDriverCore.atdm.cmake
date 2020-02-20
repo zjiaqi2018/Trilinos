@@ -156,7 +156,7 @@ MACRO(TRILINOS_SYSTEM_SPECIFIC_CTEST_DRIVER)
   ENDIF()
 
   # Let's be brave and do all rebuilds (massively speed up build times)
-  SET(CTEST_START_WITH_EMPTY_BINARY_DIRECTORY FALSE)
+  #SET(CTEST_START_WITH_EMPTY_BINARY_DIRECTORY FALSE)
 
   # Don't process any extra repos
   SET(Trilinos_EXTRAREPOS_FILE NONE)
