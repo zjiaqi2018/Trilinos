@@ -333,7 +333,6 @@ public:
   //! Print instance data to the given output stream.
   void print (std::ostream& out);
 
-  //@}
   //! \name Implementation of Teuchos::Describable
   //@{
 
@@ -681,105 +680,8 @@ private:
   //! The maximum infinity norm of all the columns of X.
   static MT maxNormInf (const MV& X);
 
-  // mfh 22 Jan 2013: This code builds correctly, but does not
-  // converge.  I'm leaving it in place in case someone else wants to
-  // work on it.
-#if 0
-  /// \brief Solve AX=B for X with Chebyshev iteration with left
-  ///   diagonal scaling, imitating ML's implementation.
-  ///
-  /// \pre A must be real-valued and symmetric positive definite.
-  /// \pre numIters >= 0
-  /// \pre eigRatio >= 1
-  /// \pre 0 < lambdaMax
-  /// \pre All entries of D_inv are positive.
-  ///
-  /// \param A [in] The matrix A in the linear system to solve.
-  /// \param B [in] Right-hand side(s) in the linear system to solve.
-  /// \param X [in] Initial guess(es) for the linear system to solve.
-  /// \param numIters [in] Number of Chebyshev iterations.
-  /// \param lambdaMax [in] Estimate of max eigenvalue of D_inv*A.
-  /// \param lambdaMin [in] Estimate of min eigenvalue of D_inv*A.  We
-  ///   only use this to determine if A is the identity matrix.
-  /// \param eigRatio [in] Estimate of max / min eigenvalue ratio of
-  ///   D_inv*A.  We use this along with lambdaMax to compute the
-  ///   Chebyshev coefficients.  This need not be the same as
-  ///   lambdaMax/lambdaMin.
-  /// \param D_inv [in] Vector of diagonal entries of A.  It must have
-  ///   the same distribution as b.
-  void
-  mlApplyImpl (const op_type& A,
-               const MV& B,
-               MV& X,
-               const int numIters,
-               const ST lambdaMax,
-               const ST lambdaMin,
-               const ST eigRatio,
-               const V& D_inv)
-  {
-    const ST zero = Teuchos::as<ST> (0);
-    const ST one = Teuchos::as<ST> (1);
-    const ST two = Teuchos::as<ST> (2);
-
-    MV pAux (B.getMap (), B.getNumVectors ()); // Result of A*X
-    MV dk (B.getMap (), B.getNumVectors ()); // Solution update
-    MV R (B.getMap (), B.getNumVectors ()); // Not in original ML; need for B - pAux
-
-    ST beta = Teuchos::as<ST> (1.1) * lambdaMax;
-    ST alpha = lambdaMax / eigRatio;
-
-    ST delta = (beta - alpha) / two;
-    ST theta = (beta + alpha) / two;
-    ST s1 = theta / delta;
-    ST rhok = one / s1;
-
-    // Diagonal: ML replaces entries containing 0 with 1.  We
-    // shouldn't have any entries like that in typical test problems,
-    // so it's OK not to do that here.
-
-    // The (scaled) matrix is the identity: set X = D_inv * B.  (If A
-    // is the identity, then certainly D_inv is too.  D_inv comes from
-    // A, so if D_inv * A is the identity, then we still need to apply
-    // the "preconditioner" D_inv to B as well, to get X.)
-    if (lambdaMin == one && lambdaMin == lambdaMax) {
-      solve (X, D_inv, B);
-      return;
-    }
-
-    // The next bit of code is a direct translation of code from ML's
-    // ML_Cheby function, in the "normal point scaling" section, which
-    // is in lines 7365-7392 of ml_smoother.c.
-
-    if (! zeroStartingSolution_) {
-      // dk = (1/theta) * D_inv * (B - (A*X))
-      A.apply (X, pAux); // pAux = A * X
-      R = B;
-      R.update (-one, pAux, one); // R = B - pAux
-      dk.elementWiseMultiply (one/theta, D_inv, R, zero); // dk = (1/theta)*D_inv*R
-      X.update (one, dk, one); // X = X + dk
-    } else {
-      dk.elementWiseMultiply (one/theta, D_inv, B, zero); // dk = (1/theta)*D_inv*B
-      X = dk;
-    }
-
-    ST rhokp1, dtemp1, dtemp2;
-    for (int k = 0; k < numIters-1; ++k) {
-      A.apply (X, pAux);
-      rhokp1 = one / (two*s1 - rhok);
-      dtemp1 = rhokp1*rhok;
-      dtemp2 = two*rhokp1/delta;
-      rhok = rhokp1;
-
-      R = B;
-      R.update (-one, pAux, one); // R = B - pAux
-      // dk = dtemp1 * dk + dtemp2 * D_inv * (B - pAux)
-      dk.elementWiseMultiply (dtemp2, D_inv, B, dtemp1);
-      X.update (one, dk, one); // X = X + dk
-    }
-  }
-#endif // 0
   //@}
-};
+}; //class Chebyshev
 
 } // namespace Details
 } // namespace Ifpack2
