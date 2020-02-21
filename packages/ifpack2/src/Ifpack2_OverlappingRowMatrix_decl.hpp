@@ -66,7 +66,7 @@ public:
   typedef typename MatrixType::node_type node_type;
   typedef typename Teuchos::ScalarTraits<scalar_type>::magnitudeType magnitude_type;
   using row_matrix_type = Tpetra::RowMatrix<scalar_type, local_ordinal_type,
-					    global_ordinal_type, node_type>;
+                                            global_ordinal_type, node_type>;
 
   static_assert(std::is_same<MatrixType, row_matrix_type>::value, "Ifpack2::OverlappingRowMatrix: The template parameter MatrixType must be a Tpetra::RowMatrix specialization.  Please don't use Tpetra::CrsMatrix (a subclass of Tpetra::RowMatrix) here anymore.  The constructor can take either a RowMatrix or a CrsMatrix just fine.");
 

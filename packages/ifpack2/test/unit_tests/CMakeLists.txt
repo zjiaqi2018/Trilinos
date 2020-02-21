@@ -79,14 +79,14 @@ TRIBITS_ADD_EXECUTABLE_AND_TEST(
   )
 
 TRIBITS_ADD_EXECUTABLE_AND_TEST(
-		RBILUK
-		SOURCES 
-		Ifpack2_UnitTestRBILUK.cpp
-		${TEUCHOS_STD_UNIT_TEST_MAIN}
-		ARGS ""
-		COMM serial mpi
-		STANDARD_PASS_OUTPUT
-		)
+    RBILUK
+    SOURCES 
+    Ifpack2_UnitTestRBILUK.cpp
+    ${TEUCHOS_STD_UNIT_TEST_MAIN}
+    ARGS ""
+    COMM serial mpi
+    STANDARD_PASS_OUTPUT
+  )
 
 #TRIBITS_ADD_EXECUTABLE(
 #    Distributed_SGS
@@ -132,7 +132,7 @@ TRIBITS_ADD_EXECUTABLE_AND_TEST(
 IF(${PACKAGE_NAME}_ENABLE_Experimental_KokkosKernels_Features)
   TRIBITS_ADD_EXECUTABLE_AND_TEST(
     BlockTriDiContainerUnitAndPerfTests
-    SOURCES 
+    SOURCES
     Ifpack2_UnitTestBlockTriDiContainer.cpp
     ARGS ""
     COMM serial mpi
