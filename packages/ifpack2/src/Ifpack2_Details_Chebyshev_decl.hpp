@@ -487,6 +487,9 @@ private:
   //! Whether to use the textbook version of the algorithm.
   bool textbookAlgorithm_;
 
+  //! Whether to use the s-step version of the algorithm.
+  bool sStepAlgorithm_;
+
   //! Whether apply() will compute and return the max residual norm.
   bool computeMaxResNorm_;
 
@@ -629,6 +632,17 @@ private:
   ///   the same distribution as b.
   void
   ifpackApplyImpl (const op_type& A,
+                   const MV& B,
+                   MV& X,
+                   const int numIters,
+                   const ST lambdaMax,
+                   const ST lambdaMin,
+                   const ST eigRatio,
+                   const V& D_inv);
+
+  /// \brief Solve AX=B for X with Chebyshev iteration with left diagonal scaling, communication-avoiding version.
+  void
+  sStepApplyImpl (const op_type& A,
                    const MV& B,
                    MV& X,
                    const int numIters,

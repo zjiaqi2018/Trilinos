@@ -293,6 +293,7 @@ Chebyshev (Teuchos::RCP<const row_matrix_type> A) :
   zeroStartingSolution_ (true),
   assumeMatrixUnchanged_ (false),
   textbookAlgorithm_ (false),
+  sStepAlgorithm_ (false),
   computeMaxResNorm_ (false),
   debug_ (false)
 {
@@ -320,6 +321,7 @@ Chebyshev (Teuchos::RCP<const row_matrix_type> A,
   zeroStartingSolution_ (true),
   assumeMatrixUnchanged_ (false),
   textbookAlgorithm_ (false),
+  sStepAlgorithm_ (false),
   computeMaxResNorm_ (false),
   debug_ (false)
 {
@@ -362,6 +364,7 @@ setParameters (Teuchos::ParameterList& plist)
   const bool defaultZeroStartingSolution = true; // Ifpack::Chebyshev default
   const bool defaultAssumeMatrixUnchanged = false;
   const bool defaultTextbookAlgorithm = false;
+  const bool defaultSStepAlgorithm = false;
   const bool defaultComputeMaxResNorm = false;
   const bool defaultDebug = false;
 
@@ -380,6 +383,7 @@ setParameters (Teuchos::ParameterList& plist)
   bool zeroStartingSolution = defaultZeroStartingSolution;
   bool assumeMatrixUnchanged = defaultAssumeMatrixUnchanged;
   bool textbookAlgorithm = defaultTextbookAlgorithm;
+  bool sStepAlgorithm = defaultSStepAlgorithm;
   bool computeMaxResNorm = defaultComputeMaxResNorm;
   bool debug = defaultDebug;
 
@@ -594,6 +598,9 @@ setParameters (Teuchos::ParameterList& plist)
   if (plist.isParameter ("chebyshev: compute max residual norm")) {
     computeMaxResNorm = plist.get<bool> ("chebyshev: compute max residual norm");
   }
+  if (plist.isParameter ("chebyshev: s-step algorithm")) {
+    sStepAlgorithm = plist.get<bool> ("chebyshev: s-step algorithm");
+  }
 
   // Test for Ifpack parameters that we won't ever implement here.
   // Be careful to use the one-argument version of get(), since the
@@ -646,6 +653,7 @@ setParameters (Teuchos::ParameterList& plist)
   zeroStartingSolution_ = zeroStartingSolution;
   assumeMatrixUnchanged_ = assumeMatrixUnchanged;
   textbookAlgorithm_ = textbookAlgorithm;
+  sStepAlgorithm_ = sStepAlgorithm;
   computeMaxResNorm_ = computeMaxResNorm;
   debug_ = debug;
 
@@ -888,9 +896,16 @@ Chebyshev<ScalarType, MV>::compute ()
     // FIXME (mfh 20 Nov 2013) Should scale this 1.0e-6 term
     // appropriately for MT's machine precision.
     if (STS::magnitude (lambdaMaxForApply_ - one) < Teuchos::as<MT> (1.0e-6)) {
+      std::cout << "Changing lambda max and min!!!!" << std::endl;
+      std::cout << "   from lambdaMinForApply_ = " << lambdaMinForApply_ << std::endl
+                << "        lambdaMaxForApply_ = " << lambdaMaxForApply_ << std::endl
+                << "        eigRatioForApply_  = " << eigRatioForApply_ << std::endl << std::endl;
       lambdaMinForApply_ = one;
       lambdaMaxForApply_ = lambdaMinForApply_;
       eigRatioForApply_ = one; // Ifpack doesn't include this line.
+      std::cout << "   to   lambdaMinForApply_ = " << lambdaMinForApply_ << std::endl
+                << "        lambdaMaxForApply_ = " << lambdaMaxForApply_ << std::endl
+                << "        eigRatioForApply_  = " << eigRatioForApply_ << std::endl;
     }
   }
 }
@@ -940,8 +955,12 @@ Chebyshev<ScalarType, MV>::apply (const MV& B, MV& X)
                        lambdaMinForApply_, eigRatioForApply_, *D_);
   }
   else {
-    ifpackApplyImpl (*A_, B, X, numIters_, lambdaMaxForApply_,
-                     lambdaMinForApply_, eigRatioForApply_, *D_);
+    if (sStepAlgorithm_)
+      sStepApplyImpl (*A_, B, X, numIters_, lambdaMaxForApply_,
+                       lambdaMinForApply_, eigRatioForApply_, *D_);
+    else
+      ifpackApplyImpl (*A_, B, X, numIters_, lambdaMaxForApply_,
+                       lambdaMinForApply_, eigRatioForApply_, *D_);
   }
 
   if (computeMaxResNorm_ && B.getNumVectors () > 0) {
@@ -1219,6 +1238,129 @@ template<class ScalarType, class MV>
 void
 Chebyshev<ScalarType, MV>::
 ifpackApplyImpl (const op_type& A,
+                 const MV& B,
+                 MV& X,
+                 const int numIters,
+                 const ST lambdaMax,
+                 const ST lambdaMin,
+                 const ST eigRatio,
+                 const V& D_inv)
+{
+  using std::endl;
+#ifdef HAVE_IFPACK2_DEBUG
+  const bool debug = debug_;
+#else
+  const bool debug = false;
+#endif
+
+  if (debug) {
+    *out_ << " \\|B\\|_{\\infty} = " << maxNormInf (B) << endl;
+    *out_ << " \\|X\\|_{\\infty} = " << maxNormInf (X) << endl;
+  }
+
+  if (numIters <= 0) {
+    return;
+  }
+  const ST zero = static_cast<ST> (0.0);
+  const ST one = static_cast<ST> (1.0);
+  const ST two = static_cast<ST> (2.0);
+
+  // Quick solve when the matrix A is the identity.
+  if (lambdaMin == one && lambdaMax == lambdaMin) {
+    solve (X, D_inv, B);
+    return;
+  }
+
+  // Initialize coefficients
+  const ST alpha = lambdaMax / eigRatio;
+  const ST beta = boostFactor_ * lambdaMax;
+  const ST delta = two / (beta - alpha);
+  const ST theta = (beta + alpha) / two;
+  const ST s1 = theta * delta;
+
+  if (debug) {
+    *out_ << " alpha = " << alpha << endl
+          << " beta = " << beta << endl
+          << " delta = " << delta << endl
+          << " theta = " << theta << endl
+          << " s1 = " << s1 << endl;
+  }
+
+  // Fetch cached temporary (multi)vector.
+  Teuchos::RCP<MV> W_ptr = makeTempMultiVector (B);
+  MV& W = *W_ptr;
+
+  if (debug) {
+    *out_ << " Iteration " << 1 << ":" << endl
+          << " - \\|D\\|_{\\infty} = " << D_->normInf () << endl;
+  }
+
+  // Special case for the first iteration.
+  if (! zeroStartingSolution_) {
+    // mfh 22 May 2019: Tests don't actually exercise this path.
+
+    if (ck_.is_null ()) {
+      Teuchos::RCP<const op_type> A_op = A_;
+      ck_ = Teuchos::rcp (new ChebyshevKernel<op_type> (A_op));
+    }
+    // W := (1/theta)*D_inv*(B-A*X) and X := X + W.
+    // X := X + W
+    ck_->compute (W, one/theta, const_cast<V&> (D_inv),
+                   const_cast<MV&> (B), X, zero);
+  }
+  else {
+    // W := (1/theta)*D_inv*B and X := 0 + W.
+    firstIterationWithZeroStartingSolution (W, one/theta, D_inv, B, X);
+  }
+
+  if (debug) {
+    *out_ << " - \\|W\\|_{\\infty} = " << maxNormInf (W) << endl
+          << " - \\|X\\|_{\\infty} = " << maxNormInf (X) << endl;
+  }
+
+  if (numIters > 1 && ck_.is_null ()) {
+    Teuchos::RCP<const op_type> A_op = A_;
+    ck_ = Teuchos::rcp (new ChebyshevKernel<op_type> (A_op));
+  }
+
+  // The rest of the iterations.
+  ST rhok = one / s1;
+  ST rhokp1, dtemp1, dtemp2;
+  for (int deg = 1; deg < numIters; ++deg) {
+    if (debug) {
+      *out_ << " Iteration " << deg+1 << ":" << endl
+            << " - \\|D\\|_{\\infty} = " << D_->normInf () << endl
+            << " - \\|B\\|_{\\infty} = " << maxNormInf (B) << endl
+            << " - \\|A\\|_{\\text{frob}} = " << A_->getFrobeniusNorm ()
+            << endl << " - rhok = " << rhok << endl;
+    }
+
+    rhokp1 = one / (two * s1 - rhok);
+    dtemp1 = rhokp1 * rhok;
+    dtemp2 = two * rhokp1 * delta;
+    rhok = rhokp1;
+
+    if (debug) {
+      *out_ << " - dtemp1 = " << dtemp1 << endl
+            << " - dtemp2 = " << dtemp2 << endl;
+    }
+
+    // W := dtemp2*D_inv*(B - A*X) + dtemp1*W.
+    // X := X + W
+    ck_->compute (W, dtemp2, const_cast<V&> (D_inv),
+                   const_cast<MV&> (B), (X), dtemp1);
+
+    if (debug) {
+      *out_ << " - \\|W\\|_{\\infty} = " << maxNormInf (W) << endl
+            << " - \\|X\\|_{\\infty} = " << maxNormInf (X) << endl;
+    }
+  }
+}
+
+template<class ScalarType, class MV>
+void
+Chebyshev<ScalarType, MV>::
+sStepApplyImpl (const op_type& A,
                  const MV& B,
                  MV& X,
                  const int numIters,
