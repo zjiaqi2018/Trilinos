@@ -41,6 +41,7 @@
 
 /// \file Ifpack2_Details_ScaledDampedResidual_decl.hpp
 /// \brief Declaration of Ifpack2::Details::ScaledDampedResidual
+/// This file is *deprecated* in favor of Ifpack2_Details_ChebyshevKernel_decl.hpp.
 ///
 /// \note This file and its contents are implementation details of
 ///   Ifpack2.

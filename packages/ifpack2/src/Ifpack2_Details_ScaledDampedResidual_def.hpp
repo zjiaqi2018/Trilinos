@@ -58,6 +58,7 @@ namespace Details {
 namespace Impl {
 
 /// \brief Functor for computing W := alpha * D * (B - A*X) + beta * W.
+/// This file is *deprecated* in favor of Ifpack2_Details_ChebyshevKernel_def.hpp.
 ///
 /// This is an implementation detail of scaled_damped_residual_vector,
 /// which in turn is an implementation detail of ScaledDampedResidual.
