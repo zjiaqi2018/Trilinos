@@ -170,7 +170,7 @@ struct ChebyshevKernelVectorFunctor {
             });
        });
   }
-};
+}; //ChebyshevKernelVectorFunctor
 
 template<class ExecutionSpace>
 int64_t
@@ -238,7 +238,7 @@ chebyshev_kernel_vector_launch_parameters (int64_t numRows,
   }
 
   return rows_per_team;
-}
+} //chebyshev_kernel_vector_launch_parameters
 
 // W := alpha * D * (B - A*X) + beta * W.
 template<class WVector,
@@ -345,7 +345,7 @@ chebyshev_kernel_vector
       Kokkos::parallel_for (kernel_label, policy, func);
     }
   }
-}
+} //chebyshev_kernel_vector
 
 } // namespace Impl
 
@@ -420,7 +420,7 @@ compute (multivector_type& W,
     TEUCHOS_ASSERT( ! A_op_.is_null () );
     unfusedCase (W, alpha, D_inv, B, *A_op_, X, beta);
   }
-}
+} //compute
 
 template<class TpetraOperatorType>
 typename ChebyshevKernel<TpetraOperatorType>::vector_type&
@@ -438,7 +438,7 @@ importVector (vector_type& X_domMap)
     X_colMap_->doImport (X_domMap, *imp_, Tpetra::REPLACE);
     return *X_colMap_;
   }
-}
+} //importVector
 
 template<class TpetraOperatorType>
 bool
@@ -478,7 +478,7 @@ unfusedCase (multivector_type& W,
 
   // X := X + W
   X.update (STS::one(), W, STS::one());
-}
+} //ChebyshevKernel::unfusedCase
 
 template<class TpetraOperatorType>
 void
@@ -554,7 +554,7 @@ fusedCase (vector_type& W,
   }
   if (!do_X_update)
     X.update(STS::one (), W, STS::one ());
-}
+} //ChebyshevKernel::fusedCase
 
 } // namespace Details
 } // namespace Ifpack2
