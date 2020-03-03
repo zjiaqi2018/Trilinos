@@ -1,12 +1,11 @@
 // @HEADER
+// ************************************************************************
 //
-// ***********************************************************************
+//                           Intrepid2 Package
+//                 Copyright (2007) Sandia Corporation
 //
-//           Amesos2: Templated Direct Sparse Solver Package
-//                  Copyright 2011 Sandia Corporation
-//
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
+// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
+// license for use of this work by or on behalf of the U.S. Government.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -35,34 +34,36 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
+// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov),
+//                    Mauro Perego  (mperego@sandia.gov), or
+//                    Nate Roberts  (nvrober@sandia.gov)
 //
-// ***********************************************************************
-//
+// ************************************************************************
 // @HEADER
-#include "Amesos2_config.h"
 
-#ifdef HAVE_AMESOS2_EXPLICIT_INSTANTIATION
+/** \file   UnitTestMain.cpp
+    \brief  Main for Teuchos unit tests.
+ */
 
-#include "Amesos2_ShyLUBasker_decl.hpp"
-#include "Amesos2_ShyLUBasker_def.hpp"
-#include "Amesos2_ExplicitInstantiationHelpers.hpp"
-#include "TpetraCore_ETIHelperMacros.h"
+#include "Teuchos_UnitTestRepository.hpp"
+#include "Teuchos_GlobalMPISession.hpp"
 
+#include "Teuchos_StackedTimer.hpp"
+#include "Teuchos_TimeMonitor.hpp"
+#include "Teuchos_DefaultComm.hpp"
 
-namespace Amesos2 {
+#include "Kokkos_Core.hpp"
 
-#ifdef HAVE_AMESOS2_EPETRA
-  AMESOS2_SOLVER_EPETRA_INST(ShyLUBasker);
-#endif
+#include <fstream>
+
+int main( int argc, char* argv[] )
+{
+  // Note that the dtor for GlobalMPISession will call Kokkos::finalize_all() but does not call Kokkos::initialize()...
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv);
+  Kokkos::initialize(argc,argv);
+  Teuchos::UnitTestRepository::setGloballyReduceTestResult(true);
+  
+  int result = Teuchos::UnitTestRepository::runUnitTestsFromMain(argc, argv);
+  
+  return result;
 }
-
-#define AMESOS2_SHYLUBASKER_LOCAL_INSTANT(S,LO,GO,N) \
-  template class Amesos2::ShyLUBasker<Tpetra::CrsMatrix<S, LO, GO, N>, \
-                                  Tpetra::MultiVector<S, LO, GO, N> >;
-
-TPETRA_ETI_MANGLING_TYPEDEFS()
-
-TPETRA_INSTANTIATE_SLGN_NO_ORDINAL_SCALAR(AMESOS2_SHYLUBASKER_LOCAL_INSTANT)
-
-#endif  // HAVE_AMESOS2_EXPLICIT_INSTANTIATION
