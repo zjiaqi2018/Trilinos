@@ -223,6 +223,7 @@ IF(Ifpack2_ENABLE_EXPLICIT_INSTANTIATION)
     TriDiContainer
     Details::Chebyshev
     Details::ChebyshevKernel
+    Details::sStepChebyshevKernel
     Details::DenseSolver
     Details::Factory
     Details::LinearSolver

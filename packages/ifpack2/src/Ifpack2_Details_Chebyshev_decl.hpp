@@ -55,6 +55,7 @@
 #include "Teuchos_VerbosityLevel.hpp"
 #include "Teuchos_Describable.hpp"
 #include "Tpetra_CrsMatrix.hpp"
+#include "Ifpack2_OverlappingRowMatrix.hpp"
 
 namespace Ifpack2 {
 namespace Details {
@@ -62,6 +63,8 @@ namespace Details {
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
 template<class TpetraOperatorType>
 class ChebyshevKernel; // forward declaration
+template<class TpetraOperatorType>
+class sStepChebyshevKernel; // forward declaration
 #endif // DOXYGEN_SHOULD_SKIP_THIS
 
 /// \class Chebyshev
@@ -124,6 +127,14 @@ public:
                            typename MV::local_ordinal_type,
                            typename MV::global_ordinal_type,
                            typename MV::node_type> row_matrix_type;
+
+  typedef Tpetra::CrsMatrix<typename MV::scalar_type,
+                           typename MV::local_ordinal_type,
+                           typename MV::global_ordinal_type,
+                           typename MV::node_type> crs_matrix_type;
+
+  typedef Ifpack2::OverlappingRowMatrix<row_matrix_type> overlapping_row_matrix_type;
+
   //! Specialization of Tpetra::Vector.
   typedef Tpetra::Vector<typename MV::scalar_type,
                          typename MV::local_ordinal_type,
@@ -357,8 +368,28 @@ private:
   /// nonnull input.
   Teuchos::RCP<const row_matrix_type> A_;
 
+  Teuchos::RCP<const overlapping_row_matrix_type> overlappingA_;
+
+  Teuchos::RCP<const crs_matrix_type> undA_;
+  Teuchos::RCP<const crs_matrix_type> extA_;
+
+  //! CrsMatrix holding imported halo rows
+  //Teuchos::RCP<typename crs_matrix_type::local_matrix_type> undA_lcl_;
+  typename crs_matrix_type::local_matrix_type undA_lcl_;
+
+  //! CrsMatrix holding imported halo rows
+  //Teuchos::RCP<typename crs_matrix_type::local_matrix_type> extA_lcl_;
+  typename crs_matrix_type::local_matrix_type extA_lcl_;
+
+  //! Array of indices indicating where halos start
+  Teuchos::ArrayView<const size_t> hstarts_;
+
+  //! Array of MultiVectors with overlapping.
+  std::vector<Teuchos::RCP<MV>> ovX_;
+
   //! "Operator" implementing W := alpha*D_inv*(B-A*X) + beta*W and X := X+W.
   Teuchos::RCP<ChebyshevKernel<op_type> > ck_;
+  Teuchos::RCP<sStepChebyshevKernel<op_type> > sck_;
 
   /// \brief The inverse of the diagonal entries of A.
   ///
@@ -489,6 +520,9 @@ private:
 
   //! Whether to use the s-step version of the algorithm.
   bool sStepAlgorithm_;
+
+  //! Number of multivectors in the system to be solved.
+  int numberOfMultiVectors_;
 
   //! Whether apply() will compute and return the max residual norm.
   bool computeMaxResNorm_;
@@ -642,14 +676,8 @@ private:
 
   /// \brief Solve AX=B for X with Chebyshev iteration with left diagonal scaling, communication-avoiding version.
   void
-  sStepApplyImpl (const op_type& A,
-                   const MV& B,
-                   MV& X,
-                   const int numIters,
-                   const ST lambdaMax,
-                   const ST lambdaMin,
-                   const ST eigRatio,
-                   const V& D_inv);
+  sStepApplyImpl (const MV& B,
+                  MV& X);
 
   /// \brief Fill x with random initial guess for power method
   ///

@@ -52,8 +52,8 @@
 /// It defines a new implementation of Chebyshev iteration.
 
 #include "Ifpack2_Details_Chebyshev_decl.hpp"
-// #include "Ifpack2_Details_ScaledDampedResidual.hpp"
 #include "Ifpack2_Details_ChebyshevKernel.hpp"
+#include "Ifpack2_Details_sStepChebyshevKernel.hpp"
 #include "Kokkos_ArithTraits.hpp"
 #include "Teuchos_FancyOStream.hpp"
 #include "Teuchos_oblackholestream.hpp"
@@ -294,6 +294,7 @@ Chebyshev (Teuchos::RCP<const row_matrix_type> A) :
   assumeMatrixUnchanged_ (false),
   textbookAlgorithm_ (false),
   sStepAlgorithm_ (false),
+  numberOfMultiVectors_ (1), 
   computeMaxResNorm_ (false),
   debug_ (false)
 {
@@ -384,6 +385,7 @@ setParameters (Teuchos::ParameterList& plist)
   bool assumeMatrixUnchanged = defaultAssumeMatrixUnchanged;
   bool textbookAlgorithm = defaultTextbookAlgorithm;
   bool sStepAlgorithm = defaultSStepAlgorithm;
+  int  numberOfMultiVectors = 1;
   bool computeMaxResNorm = defaultComputeMaxResNorm;
   bool debug = defaultDebug;
 
@@ -602,6 +604,10 @@ setParameters (Teuchos::ParameterList& plist)
     sStepAlgorithm = plist.get<bool> ("chebyshev: s-step algorithm");
   }
 
+  if (plist.isParameter ("chebyshev: number of vectors")) {
+    numberOfMultiVectors = plist.get<bool> ("chebyshev: number of vectors");
+  }
+
   // Test for Ifpack parameters that we won't ever implement here.
   // Be careful to use the one-argument version of get(), since the
   // two-argment version adds the parameter if it's not there.
@@ -654,6 +660,7 @@ setParameters (Teuchos::ParameterList& plist)
   assumeMatrixUnchanged_ = assumeMatrixUnchanged;
   textbookAlgorithm_ = textbookAlgorithm;
   sStepAlgorithm_ = sStepAlgorithm;
+  numberOfMultiVectors_ = numberOfMultiVectors;
   computeMaxResNorm_ = computeMaxResNorm;
   debug_ = debug;
 
@@ -690,6 +697,7 @@ void
 Chebyshev<ScalarType, MV>::reset ()
 {
   ck_ = Teuchos::null;
+  sck_ = Teuchos::null;
   D_ = Teuchos::null;
   diagOffsets_ = offsets_type ();
   savedDiagOffsets_ = false;
@@ -710,6 +718,7 @@ setMatrix (const Teuchos::RCP<const row_matrix_type>& A)
     }
     A_ = A;
     ck_ = Teuchos::null; // constructed on demand
+    sck_ = Teuchos::null; // constructed on demand
 
     // The communicator may have changed, or we may not have had a
     // communicator before.  Thus, we may have to reset the debug
@@ -747,6 +756,8 @@ void
 Chebyshev<ScalarType, MV>::compute ()
 {
   using std::endl;
+  using Teuchos::RCP;
+  using Teuchos::rcp_dynamic_cast;
   // Some of the optimizations below only work if A_ is a
   // Tpetra::CrsMatrix.  We'll make our best guess about its type
   // here, since we have no way to get back the original fifth
@@ -760,6 +771,44 @@ Chebyshev<ScalarType, MV>::compute ()
     A_.is_null (), std::runtime_error, "Ifpack2::Chebyshev::compute: The input "
     "matrix A is null.  Please call setMatrix() with a nonnull input matrix "
     "before calling this method.");
+
+  /*FIXME
+    don't need to keep RCP to OverlappingRowMatrix, it can be local to this method
+  */
+
+  /*
+    TODO FIXME
+    check that overlap is sufficient
+  */
+
+  // s-step requires an Ifpack2 overlapping row matrix, in order to access halo information.
+  if (sStepAlgorithm_) {
+    RCP<const Ifpack2::Details::RowMatrix<row_matrix_type>> if2A = rcp_dynamic_cast<const Ifpack2::Details::RowMatrix<row_matrix_type>>(A_);
+    TEUCHOS_TEST_FOR_EXCEPTION(if2A.is_null(), std::runtime_error, "Ifpack2::Chebyshev::compute: Input matrix cannot be cast to an Ifpack2::Details::RowMatrix, which is required for s-step Chebyshev.");
+    overlappingA_ = rcp_dynamic_cast<const overlapping_row_matrix_type>(if2A);
+    TEUCHOS_TEST_FOR_EXCEPTION(overlappingA_.is_null(), std::runtime_error, "Ifpack2::Chebyshev::compute: Input matrix cannot be cast to an Ifpack2::OverappingRowMatrix, which is required for s-step Chebyshev.");
+
+    undA_ = rcp_dynamic_cast<const crs_matrix_type>(overlappingA_->getUnderlyingMatrix());
+    extA_ = rcp_dynamic_cast<const crs_matrix_type>(overlappingA_->getExtMatrix());
+
+    // FIXME This is doing a deep copy ...
+    undA_lcl_ = undA_->getLocalMatrix();
+    extA_lcl_ = extA_->getLocalMatrix();
+
+    /*
+      TODO : create and populate overlapped solution vector
+         need ovX declared
+         need to know how many RHS vectors there are
+    */
+    hstarts_ = overlappingA_->getExtHaloStarts();
+    RCP<const map_type> ovRowmap = overlappingA_->getRowMap();
+    RCP<const map_type> ovColmap = overlappingA_->getColMap();
+    //create two overlapping solution "work" vectors
+    ovX_.push_back(rcp(new MV(ovRowmap, numberOfMultiVectors_))); 
+    ovX_.push_back(rcp(new MV(ovRowmap, numberOfMultiVectors_))); 
+
+  }
+
 
   // If A_ is a CrsMatrix and its graph is constant, we presume that
   // the user plans to reuse the structure of A_, but possibly change
@@ -956,8 +1005,9 @@ Chebyshev<ScalarType, MV>::apply (const MV& B, MV& X)
   }
   else {
     if (sStepAlgorithm_)
-      sStepApplyImpl (*A_, B, X, numIters_, lambdaMaxForApply_,
-                       lambdaMinForApply_, eigRatioForApply_, *D_);
+      //sStepApplyImpl (undA_lcl_, extA_lcl_, B, X, numIters_, lambdaMaxForApply_,
+      //                 lambdaMinForApply_, eigRatioForApply_, *D_);
+      sStepApplyImpl (B, X);
     else
       ifpackApplyImpl (*A_, B, X, numIters_, lambdaMaxForApply_,
                        lambdaMinForApply_, eigRatioForApply_, *D_);
@@ -1355,19 +1405,12 @@ ifpackApplyImpl (const op_type& A,
             << " - \\|X\\|_{\\infty} = " << maxNormInf (X) << endl;
     }
   }
-}
+} //ifpackApplyImpl
 
 template<class ScalarType, class MV>
 void
 Chebyshev<ScalarType, MV>::
-sStepApplyImpl (const op_type& A,
-                 const MV& B,
-                 MV& X,
-                 const int numIters,
-                 const ST lambdaMax,
-                 const ST lambdaMin,
-                 const ST eigRatio,
-                 const V& D_inv)
+sStepApplyImpl (const MV& B, MV& X)
 {
   using std::endl;
 #ifdef HAVE_IFPACK2_DEBUG
@@ -1381,7 +1424,7 @@ sStepApplyImpl (const op_type& A,
     *out_ << " \\|X\\|_{\\infty} = " << maxNormInf (X) << endl;
   }
 
-  if (numIters <= 0) {
+  if (numIters_ <= 0) {
     return;
   }
   const ST zero = static_cast<ST> (0.0);
@@ -1389,14 +1432,14 @@ sStepApplyImpl (const op_type& A,
   const ST two = static_cast<ST> (2.0);
 
   // Quick solve when the matrix A is the identity.
-  if (lambdaMin == one && lambdaMax == lambdaMin) {
-    solve (X, D_inv, B);
+  if (lambdaMinForApply_ == one && lambdaMaxForApply_ == lambdaMinForApply_) {
+    solve (X, *D_, B);
     return;
   }
 
   // Initialize coefficients
-  const ST alpha = lambdaMax / eigRatio;
-  const ST beta = boostFactor_ * lambdaMax;
+  const ST alpha = lambdaMaxForApply_ / eigRatioForApply_;
+  const ST beta = boostFactor_ * lambdaMaxForApply_;
   const ST delta = two / (beta - alpha);
   const ST theta = (beta + alpha) / two;
   const ST s1 = theta * delta;
@@ -1422,18 +1465,19 @@ sStepApplyImpl (const op_type& A,
   if (! zeroStartingSolution_) {
     // mfh 22 May 2019: Tests don't actually exercise this path.
 
-    if (ck_.is_null ()) {
-      Teuchos::RCP<const op_type> A_op = A_;
-      ck_ = Teuchos::rcp (new ChebyshevKernel<op_type> (A_op));
+    if (sck_.is_null ()) {
+      //Teuchos::RCP<const op_type> A_op = A_;
+      //FIXME why template on op_type?
+      sck_ = Teuchos::rcp (new sStepChebyshevKernel<op_type>(undA_, extA_));
     }
-    // W := (1/theta)*D_inv*(B-A*X) and X := X + W.
+    // W := (1/theta)**D_*(B-A*X) and X := X + W.
     // X := X + W
-    ck_->compute (W, one/theta, const_cast<V&> (D_inv),
-                   const_cast<MV&> (B), X, zero);
+    sck_->compute (W, one/theta, const_cast<V&> (*D_),
+                   const_cast<MV&> (B), X, zero, hstarts_[numIters_-1]); //TODO check this
   }
   else {
-    // W := (1/theta)*D_inv*B and X := 0 + W.
-    firstIterationWithZeroStartingSolution (W, one/theta, D_inv, B, X);
+    // W := (1/theta)**D_*B and X := 0 + W.
+    firstIterationWithZeroStartingSolution (W, one/theta, *D_, B, X);
   }
 
   if (debug) {
@@ -1441,15 +1485,16 @@ sStepApplyImpl (const op_type& A,
           << " - \\|X\\|_{\\infty} = " << maxNormInf (X) << endl;
   }
 
-  if (numIters > 1 && ck_.is_null ()) {
-    Teuchos::RCP<const op_type> A_op = A_;
-    ck_ = Teuchos::rcp (new ChebyshevKernel<op_type> (A_op));
+  if (numIters_ > 1 && sck_.is_null ()) {
+    //Teuchos::RCP<const op_type> A_op = A_;
+    //FIXME why template on op_type?
+    sck_ = Teuchos::rcp (new sStepChebyshevKernel<op_type> (undA_, extA_));
   }
 
   // The rest of the iterations.
   ST rhok = one / s1;
   ST rhokp1, dtemp1, dtemp2;
-  for (int deg = 1; deg < numIters; ++deg) {
+  for (int deg = 1; deg < numIters_; ++deg) {
     if (debug) {
       *out_ << " Iteration " << deg+1 << ":" << endl
             << " - \\|D\\|_{\\infty} = " << D_->normInf () << endl
@@ -1468,17 +1513,18 @@ sStepApplyImpl (const op_type& A,
             << " - dtemp2 = " << dtemp2 << endl;
     }
 
-    // W := dtemp2*D_inv*(B - A*X) + dtemp1*W.
+    // W := dtemp2**D_*(B - A*X) + dtemp1*W.
     // X := X + W
-    ck_->compute (W, dtemp2, const_cast<V&> (D_inv),
-                   const_cast<MV&> (B), (X), dtemp1);
+    sck_->compute (W, dtemp2, const_cast<V&> (*D_),
+                   const_cast<MV&> (B), (X), dtemp1, hstarts_[numIters_-deg-1]);
+                                                           // ^^^^^^^^^^^^^^^  TODO triple check this
 
     if (debug) {
       *out_ << " - \\|W\\|_{\\infty} = " << maxNormInf (W) << endl
             << " - \\|X\\|_{\\infty} = " << maxNormInf (X) << endl;
     }
   }
-}
+} //sStepApplyImpl
 
 template<class ScalarType, class MV>
 typename Chebyshev<ScalarType, MV>::ST
@@ -1545,7 +1591,7 @@ powerMethodWithInitGuess (const op_type& A,
     *out_ << "  lambdaMax: " << lambdaMax << endl;
   }
   return lambdaMax;
-}
+} //powerMethodWithInitGuess
 
 template<class ScalarType, class MV>
 void
