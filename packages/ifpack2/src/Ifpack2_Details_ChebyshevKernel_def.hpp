@@ -420,7 +420,7 @@ apply (multivector_type& W,
     TEUCHOS_ASSERT( ! A_op_.is_null () );
     unfusedCase (W, alpha, D_inv, B, *A_op_, X, beta);
   }
-} //compute
+} //apply
 
 template<class TpetraOperatorType>
 typename ChebyshevKernel<TpetraOperatorType>::vector_type&
