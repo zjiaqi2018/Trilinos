@@ -389,7 +389,7 @@ setMatrix (const Teuchos::RCP<const operator_type>& A)
 template<class TpetraOperatorType>
 void
 ChebyshevKernel<TpetraOperatorType>::
-compute (multivector_type& W,
+apply (multivector_type& W,
          const SC& alpha,
          vector_type& D_inv,
          multivector_type& B,
