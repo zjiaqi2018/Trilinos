@@ -260,7 +260,11 @@ export ATDM_CONFIG_TRIL_CMAKE_INSTALL_PREFIX_DATE_BASE_DEFAULT=/projects/atdm_de
 
 # System-info for what ATS-2 system we are using
 if [[ "${ATDM_CONFIG_KNOWN_HOSTNAME}" == "vortex" ]] ; then
+  export ATDM_CONFIG_ATS2_LOGIN_NODE=vortex60
   export ATDM_CONFIG_ATS2_LAUNCH_NODE=vortex59
+  # NOTE: If more login and launch nodes gets added to 'vortex', we will need
+  # to change this to a list of node names instead of just one.  But we will
+  # deal with that later if that occurs.
 else
   echo "Error, the ats2 env on system '${ATDM_CONFIG_KNOWN_HOSTNAME}'"
   return
@@ -279,38 +283,21 @@ function atdm_ats2_get_allocated_compute_node_name() {
      echo
   fi
 }
-
 export -f atdm_ats2_get_allocated_compute_node_name
 
 
 function atdm_ats2_get_node_type() {
   current_hostname=$(hostname)
-  compute_node=$(atdm_ats2_get_allocated_compute_node_name)
-
-  if  [[ "${compute_node}" != "" ]] && \
-      [[ "${current_hostname}" == "${ATDM_CONFIG_ATS2_LAUNCH_NODE}" ]] \
-    ; then
-    echo "launch_node"
-  elif [[ "${compute_node}" != "" ]] ; then
-    echo "compute_node"
-  else
+  if   [[ "${current_hostname}" == "${ATDM_CONFIG_ATS2_LOGIN_NODE}" ]] ; then
     echo "login_node"
+  elif [[ "${current_hostname}" == "${ATDM_CONFIG_ATS2_LAUNCH_NODE}" ]] ; then
+    echo "launch_node"
+  else
+    echo "compute_node"
   fi
 }
-
 export -f atdm_ats2_get_node_type
 
-unset atdm_run_script_on_compute_node
-
-atdm_ats2_node_type=$(atdm_ats2_get_node_type)
-
-if [[ "${atdm_ats2_node_type}" == "compute_node" ]] ; then
-  # Already on a compute node to just run directly on local node
-  source $ATDM_SCRIPT_DIR/common/define_run_on_local_node_func.sh
-else
-  # On login node or launch node, just use lalloc to run on a compute node
-  source $ATDM_SCRIPT_DIR/common/define_run_on_ats2_compute_node_func.sh
-fi
 
 #
 # All done!
