@@ -1486,9 +1486,8 @@ sStepApplyImpl (const MV& B, MV& X)
 
   // Special case for the first iteration.
   //if (! zeroStartingSolution_) { FIXME
-  if (true) {
+  if (true) { //FIXME
     // mfh 22 May 2019: Tests don't actually exercise this path.
-    std::cout << "Iteration 0 (nonzero init guess)" << std::endl;
 
     if (sck_.is_null ()) {
       Teuchos::RCP<const op_type> A_op = A_;
@@ -1503,7 +1502,7 @@ sStepApplyImpl (const MV& B, MV& X)
   }
   else {
     // W := (1/theta)**D_*B and X := 0 + W.
-    std::cout << "Iteration 0 (zero init guess)" << std::endl;
+    //std::cout << "Iteration 0 (zero init guess)" << std::endl;
     firstIterationWithZeroStartingSolution (W, one/theta, *ovD_, *ovB_, *ovX_[0]);
   }
 
@@ -1522,7 +1521,7 @@ sStepApplyImpl (const MV& B, MV& X)
   ST rhok = one / s1;
   ST rhokp1, dtemp1, dtemp2;
   for (int deg = 1; deg < numIters_; ++deg) {
-    std::cout << "Iteration " << deg << std::endl;
+    //std::cout << "Iteration " << deg << std::endl;
     if (debug) {
       *out_ << " Iteration " << deg+1 << ":" << endl
             << " - \\|D\\|_{\\infty} = " << D_->normInf () << endl
@@ -1540,8 +1539,6 @@ sStepApplyImpl (const MV& B, MV& X)
       *out_ << " - dtemp1 = " << dtemp1 << endl
             << " - dtemp2 = " << dtemp2 << endl;
     }
-
-    std::cout << "numIters_-deg-1=" << numIters_-deg-1 << std::endl;
 
     // W := dtemp2**D_*(B - A*X) + dtemp1*W.
     // X := X + W
