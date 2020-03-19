@@ -869,19 +869,19 @@ namespace Belos {
       }
       
       //Value with largest product goes in the next slot:
-      MagnitudeType * maxPointer = std::max_element(prod.values(), (prod.values()+dimN));
-      int maxIndex = int (maxPointer- prod.values());
-      sorted(j,0) = thetaN(maxIndex,0);
-      sorted(j,1) = thetaN(maxIndex,1);
-      newIndex[j] = index[maxIndex];
+      MagnitudeType * maxPointer2 = std::max_element(prod.values(), (prod.values()+dimN));
+      int maxIndex2 = int (maxPointer2 - prod.values());
+      sorted(j,0) = thetaN(maxIndex2,0);
+      sorted(j,1) = thetaN(maxIndex2,1);
+      newIndex[j] = index[maxIndex2];
 
       //If it was complex (and scalar type real) put its conjugate in next slot:
       if(sorted(j,1)!= SCT::zero() && !SCT::isComplex) 
       {
         j++;
-        sorted(j,0) = thetaN(maxIndex,0);
-        sorted(j,1) = -thetaN(maxIndex,1);
-        newIndex[j] = index[maxIndex+1];
+        sorted(j,0) = thetaN(maxIndex2,0);
+        sorted(j,1) = -thetaN(maxIndex2,1);
+        newIndex[j] = index[maxIndex2+1];
       }
       j++;
     }
