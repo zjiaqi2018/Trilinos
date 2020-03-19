@@ -47,6 +47,7 @@
 \brief Ifpack2 Unit test for the OverlappingRowMatrix template.
 */
 
+#include <unistd.h>
 
 #include <Teuchos_ConfigDefs.hpp>
 #include <Ifpack2_ConfigDefs.hpp>
@@ -114,10 +115,11 @@ typedef Tpetra::global_size_t GST;
 
 /***********************************************************************************/
 template<class MatrixClass, class MultiVectorClass>
-void localReducedMatvec(const MatrixClass & A_lcl,
+void localReducedMatvecFcn(const MatrixClass & A_lcl,
                         const MultiVectorClass & X_lcl,
                         const int userNumRows,
-                        MultiVectorClass & Y_lcl) {
+                        MultiVectorClass & Y_lcl,
+                        const int rank) {
   using Teuchos::NO_TRANS;
 
   using execution_space = typename MatrixClass::execution_space;
@@ -132,6 +134,12 @@ void localReducedMatvec(const MatrixClass & A_lcl,
   
   int64_t numLocalRows = userNumRows;
   int64_t myNnz = A_lcl.nnz();
+
+  std::cout << "    (" << rank << ") userNumRows=" << userNumRows << std::endl;
+  std::cout << "    (" << rank << ") Y_lcl.extent=" << Y_lcl.extent(0) << std::endl;
+  std::cout << "    (" << rank << ") A_lcl.numRows=" << A_lcl.numRows() << std::endl;
+  std::cout << "    (" << rank << ") A_lcl.numCols=" << A_lcl.numCols() << std::endl;
+  std::cout << "    (" << rank << ") X_lcl.extent=" << X_lcl.extent(0) << std::endl;
 
   int64_t rows_per_team = 
     Tpetra::Details::residual_launch_parameters<execution_space>(numLocalRows, myNnz, rows_per_thread, team_size, vector_length);
@@ -157,6 +165,7 @@ void localReducedMatvec(const MatrixClass & A_lcl,
   if(is_vector) {
     // Vector case
     // Kernel interior shamelessly horked from Ifpack2_Details_ScaledDampedResidual_def.hpp
+    std::cout << "    (" << rank << ") vector case" << std::endl;
     Kokkos::parallel_for("reduced-mv-vector",policy,KOKKOS_LAMBDA(const team_member& dev) {
         Kokkos::parallel_for(Kokkos::TeamThreadRange (dev, 0, rows_per_team),[&] (const LO loop) {
             const LO lclRow = static_cast<LO> (dev.league_rank ()) * rows_per_team + loop;
@@ -180,6 +189,7 @@ void localReducedMatvec(const MatrixClass & A_lcl,
   } else {
     // MultiVector case
     // Kernel interior shamelessly horked from Ifpack2_Details_ScaledDampedResidual_def.hpp
+    std::cout << "    (" << rank << ") multivector case" << std::endl;
     Kokkos::parallel_for("reduced-mv-multivector",policy,KOKKOS_LAMBDA(const team_member& dev) {
         // NOTE: It looks like I should be able to get this data up above, but if I try to
         // we get internal compiler errors.  Who knew that gcc tried to "gimplify"?
@@ -190,13 +200,17 @@ void localReducedMatvec(const MatrixClass & A_lcl,
             if (lclRow >= numLocalRows) {
               return;
             }
+            //printf("   (%d) lclRow=%ld, return early=%d\n",rank,lclRow,(lclRow >= numLocalRows) ? 1 : 0);
+
             const auto A_row = A_lcl.rowConst(lclRow);
             const LO row_length = A_row.length;
+            printf("===>   (%d) localRow %ld, length = %ld\n", rank, lclRow, row_length);
             for(LO v=0; v<numVectors; v++) {
               residual_value_type A_x = KAT::zero ();          
               
               Kokkos::parallel_reduce(Kokkos::ThreadVectorRange (dev, row_length), [&] (const LO iEntry, residual_value_type& lsum) {
                   const auto A_val = A_row.value(iEntry);
+                  printf("[%d] A_row.colidx(%ld)=%d\n",rank,iEntry,A_row.colidx(iEntry));
                   lsum += A_val * X_lcl(A_row.colidx(iEntry),v);
                 }, A_x);
               Y_lcl(lclRow,v) = A_x;
@@ -205,16 +219,17 @@ void localReducedMatvec(const MatrixClass & A_lcl,
           });//end parallel_for TeamThreadRange
       });//end parallel_for "residual-multivector"
   }// end else                                     
-}// end reducedMatvec
+}// end localReducedMatvecFcn
 
 
     
 /***********************************************************************************/
 template<class OverlappedMatrixClass, class MultiVectorClass>
-void reducedMatvec(const OverlappedMatrixClass & A,
+void reducedMatvecFcn(const OverlappedMatrixClass & A,
                    const MultiVectorClass & X,
                    const int overlapLevel,
-                   MultiVectorClass & Y) {
+                   MultiVectorClass & Y,
+                   const int &rank) {
   using crs_matrix_type = Tpetra::CrsMatrix<typename OverlappedMatrixClass::scalar_type,
     typename OverlappedMatrixClass::local_ordinal_type,
     typename OverlappedMatrixClass::global_ordinal_type,
@@ -224,9 +239,11 @@ void reducedMatvec(const OverlappedMatrixClass & A,
   RCP<const crs_matrix_type> undA = Teuchos::rcp_dynamic_cast<const crs_matrix_type>(A.getUnderlyingMatrix());
   RCP<const crs_matrix_type> extA = Teuchos::rcp_dynamic_cast<const crs_matrix_type>(A.getExtMatrix());
   Teuchos::ArrayView<const size_t> hstarts = A.getExtHaloStarts();
+  for (auto i : hstarts)
+     std::cout << "[" << rank << "] hstart[" << i << "]=" << hstarts[i] << std::endl;
 
   if(overlapLevel >= (int) hstarts.size()) 
-    throw std::runtime_error("reducedMatvec: Exceeded available overlap");
+    throw std::runtime_error("reducedMatvecFcn: Exceeded available overlap");
 
   auto undA_lcl = undA->getLocalMatrix ();
   auto extA_lcl = extA->getLocalMatrix ();
@@ -234,8 +251,12 @@ void reducedMatvec(const OverlappedMatrixClass & A,
   auto Y_lcl = Y.getLocalViewDevice ();
   
   // Do the "Local part"
+  std::cout << "  (" << rank << ") local matvec" << std::endl;
   auto numLocalRows = undA->getNodeNumRows();
-  localReducedMatvec(undA_lcl,X_lcl,numLocalRows,Y_lcl);
+  if (rank==0) {
+    std::cout << "  (" << rank << ") X_lcl.extent=" << X_lcl.extent(0) << std::endl;;
+  }
+  localReducedMatvecFcn(undA_lcl,X_lcl,numLocalRows,Y_lcl,rank);
 
   
   // Now, do the "overlapped part"
@@ -245,17 +266,24 @@ void reducedMatvec(const OverlappedMatrixClass & A,
     
     int xlimit = ( (overlapLevel == hstarts.size()-1) ? X_lcl.extent(0) : numLocalRows+hstarts[overlapLevel+1] );
     auto X_ext = Kokkos::subview(X_lcl,std::make_pair(0,xlimit),Kokkos::ALL());
+
+    std::cout << "  (" << rank << ") overlapped matvec, overlap=" << overlapLevel << ":" << std::endl 
+              << "  (" << rank << ") numLocalRows=" << numLocalRows << std::endl
+              << "  (" << rank << ") hstarts[overlapLevel+1]=" << hstarts[overlapLevel+1] << std::endl
+              << "  (" << rank << ") hstarts.size-1=" << hstarts.size()-1 << std::endl
+              << "  (" << rank << ") X_lcl.extent=" << X_lcl.extent(0) << std::endl
+              << "  (" << rank << ") hind=" << overlapLevel << std::endl
+              << "  (" << rank << ") yrange=" << yrange << std::endl
+              << "  (" << rank << ") xlimit=" << xlimit << std::endl
+              << "  (" << rank << ") extA->numRows=" << extA_lcl.numRows()
+              << std::endl;
     
-    localReducedMatvec(extA_lcl,X_ext,yrange,Y_ext);
+    localReducedMatvecFcn(extA_lcl,X_ext,yrange,Y_ext, rank);
   }
 
-}
+} //reducedMatvecFcn
 
-
-
-
-
-
+/***********************************************************************************/
 
 TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2OverlappingRowMatrix, Test0, Scalar, LO, GO)
 {
@@ -577,15 +605,40 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2OverlappingRowMatrix, reducedMatvec, Sc
   using MV = Tpetra::MultiVector<SC,LO,GO,NO>;
   using Teuchos::RCP;
   Tpetra::global_size_t num_rows_per_proc = 5;
+
+  /*
+    Test that standard SpMV and "reduced" SpMV (after doing one fat halo exchange) yield the same solution.
+    The test matrix is 1-D Poisson with 5 rows per MPI process.  
+    Three standard SpMVs on the nonoverlapped matrix are compared to three reduced SpMVs on the same matrix with
+    overlap two, where the halo exchange is done beforehand.
+  */
   
   const RCP<const Tpetra::Map<LocalOrdinal,GlobalOrdinal,Node> > rowmap = tif_utest::create_tpetra_map<LocalOrdinal,GlobalOrdinal,Node>(num_rows_per_proc);
   // Only run on > 1 core
   if(rowmap->getComm()->getSize() == 1) return;  
 
-  RCP<const Tpetra::CrsMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> > A = tif_utest::create_test_matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>(rowmap);
+  RCP<const Tpetra::CrsMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> > A = tif_utest::create_test_matrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>(rowmap, Scalar (-1));
+RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::cout));
+  fos->setOutputToRootOnly(0);
+  *fos << "original A\n==============" << std::endl;
+  fos->setOutputToRootOnly(-1);
 
-  // This needs to be one less than the number of matvecs we test
-  int overlapLevel = 2;
+  sleep(1);
+  rowmap->getComm()->barrier();
+
+  A->describe(*fos,Teuchos::VERB_EXTREME);
+
+  fos->setOutputToRootOnly(0);
+  sleep(1);
+  rowmap->getComm()->barrier();
+  *fos << "end of original A\n==============" << std::endl;
+  fos->setOutputToRootOnly(-1);
+  sleep(1);
+  rowmap->getComm()->barrier();
+
+  // This needs to be the same as the number of matvecs we test
+  // See https://github.com/trilinos/Trilinos/issues/7017.
+  int overlapLevel = 3;
   Ifpack2::OverlappingRowMatrix<row_matrix_type> ovA(A, overlapLevel);
 
   RCP<const row_matrix_type> ExtMatrix = ovA.getExtMatrix();
@@ -595,9 +648,10 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2OverlappingRowMatrix, reducedMatvec, Sc
   int numVecs = 2; 
   MV x(rowmap,numVecs), y_direct(rowmap,numVecs), y_overlap(rowmap,numVecs);
   x.putScalar(one); 
+  //x.randomize();
 
   {
-    // Direct approach
+    // Direct approach (communication at each SpMV)
     MV temp1(rowmap,numVecs), temp2(rowmap,numVecs);
     A->apply(x,temp1);
     A->apply(temp1,temp2);
@@ -608,23 +662,26 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2OverlappingRowMatrix, reducedMatvec, Sc
     // Overlap approach
     RCP<const map_type> ovRowmap = ovA.getRowMap();
     RCP<const map_type> ovColmap = ovA.getColMap();
-    MV ovX(ovRowmap,numVecs), ovY(ovRowmap,numVecs), temp1(ovRowmap,numVecs), temp2(ovRowmap,numVecs);
+    MV ovX(ovRowmap,numVecs), ovY(ovRowmap,numVecs), temp1(ovRowmap,numVecs);
     ovX.putScalar(zero);
     Teuchos::ArrayView<const size_t> hstarts = ovA.getExtHaloStarts();
     ovA.importMultiVector(x,ovX);
-#if 0
+#if 1
     printf("Halo Starts:");
     for(size_t i=0; i< (size_t)hstarts.size(); i++)
       printf("%d ",(int) hstarts[i]);
     printf("\n");
 #endif
-    //    printf("Before matvec A is (locally)%dx%d x is of size %d, ovX is ov size %d\n",(int)A->getNodeNumRows(),(int)A->getNodeNumCols(),
-    //           (int)x.getMap()->getNodeNumElements(),(int)ovX.getMap()->getNodeNumElements());
-    //    printf("ovA->getUnderlyingMatrix() is (locally) %dx%d\n",(int)ovA.getUnderlyingMatrix()->getNodeNumRows(),(int)ovA.getUnderlyingMatrix()->getNodeNumCols());
-
-    reducedMatvec(ovA,ovX,2,temp1);
-    reducedMatvec(ovA,temp1,1,temp2);
-    reducedMatvec(ovA,temp2,0,ovY);
+    //printf("Before matvec A is (locally)%dx%d x is of size %d, ovX is of size %d\n",(int)A->getNodeNumRows(),(int)A->getNodeNumCols(), (int)x.getMap()->getNodeNumElements(),(int)ovX.getMap()->getNodeNumElements());
+    //printf("ovA->getUnderlyingMatrix() is (locally) %dx%d\n",(int)ovA.getUnderlyingMatrix()->getNodeNumRows(),(int)ovA.getUnderlyingMatrix()->getNodeNumCols());
+    int rank = rowmap->getComm()->getRank();
+    std::cout << "** matvec, overlap=2" << std::endl;
+    reducedMatvecFcn(ovA,ovX,2,temp1,rank);
+    ovX.putScalar(zero);
+    std::cout << "** matvec, overlap=1" << std::endl;
+    reducedMatvecFcn(ovA,temp1,1,ovX,rank);
+    std::cout << "** matvec, overlap=0" << std::endl;
+    reducedMatvecFcn(ovA,ovX,0,ovY,rank);
 
     // And yes, that int cast is really necessary
     auto ovY_lcl = ovY.getLocalViewDevice();
@@ -634,10 +691,56 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2OverlappingRowMatrix, reducedMatvec, Sc
 
   }
 
+#if 1
+  typedef Teuchos::ScalarTraits<Scalar> STS;
+  typedef typename STS::magnitudeType MT;
+  Teuchos::Array<MT> normsDirect(y_direct.getNumVectors ());
+  Teuchos::Array<MT> normsOverlap(y_overlap.getNumVectors ());
 
+  Teuchos::ArrayRCP<const Scalar> data_direct = y_direct.getData(0);
+  Teuchos::ArrayRCP<const Scalar> data_overlap = y_overlap.getData(0);
+  y_direct.norm2(normsDirect());
+  y_overlap.norm2(normsOverlap());
+  out << "||y_direct||  = " << normsDirect << std::endl;
+  out << "||y_overlap|| = " << normsOverlap << std::endl;
+
+  rowmap->getComm()->barrier(); sleep(1);
+
+  int rank = rowmap->getComm()->getRank();
+  if (rank == 0)
+    std::cout << "y_direct\n=======" << std::endl;
+
+  rowmap->getComm()->barrier(); sleep(1);
+
+  for (int i=0; i<rowmap->getComm()->getSize(); ++i) {
+    //y_direct.describe(*fos,Teuchos::VERB_EXTREME);
+    if (rank == i) {
+      for (auto x : data_direct)
+        std::cout << "[" << rank << "] " << x << std::endl;
+    }
+  }
+  rowmap->getComm()->barrier(); sleep(1);
+  if (rank == 0) {
+    std::cout << "-----------------" << std::endl;
+    std::cout << "y_overlap\n=======" << std::endl;
+  }
+
+  rowmap->getComm()->barrier(); sleep(1);
+
+  for (int i=0; i<rowmap->getComm()->getSize(); ++i) {
+    //y_direct.describe(*fos,Teuchos::VERB_EXTREME);
+    if (rank == i) {
+      for (auto x : data_overlap)
+        std::cout << "[" << rank << "] " << x << std::endl;
+    }
+  }
+  //y_overlap.describe(*fos,Teuchos::VERB_EXTREME);
+#endif
+
+  rowmap->getComm()->barrier(); sleep(1);
   // Compare solutions
   TEST_COMPARE_FLOATING_ARRAYS( y_direct.get1dView (), y_overlap.get1dView (), 1e4 * Teuchos::ScalarTraits<Scalar>::eps () );
-  
+
 }
 
 

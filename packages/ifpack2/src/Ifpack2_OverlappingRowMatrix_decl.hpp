@@ -322,12 +322,12 @@ public:
   virtual void
   importMultiVector (const Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type> &X,
                      Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type> &OvX,
-                     Tpetra::CombineMode CM = Tpetra::INSERT);
+                     Tpetra::CombineMode CM = Tpetra::INSERT) const;
 
   virtual void
   exportMultiVector (const Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type> &OvX,
                      Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type> &X,
-                     Tpetra::CombineMode CM = Tpetra::ADD);
+                     Tpetra::CombineMode CM = Tpetra::ADD) const;
 
   std::string description() const;
 

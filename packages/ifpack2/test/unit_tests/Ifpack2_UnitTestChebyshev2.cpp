@@ -74,13 +74,6 @@ The textbook implementation of Chebyshev converges faster if the
 eigenvalue bounds are good, but it is much more sensitive than
 Ifpack2::Chebyshev to an incorrect upper bound on the eigenvalues.
 This gives me confidence that Ifpack2's version is correct.
-
-There is also dead code for imitating ML's Chebyshev implementation
-(ML_Cheby(), in packages/ml/src/Smoother/ml_smoother.c) in
-Ifpack2::Details::Chebyshev.  I couldn't get it to converge, and
-didn't want to waste time.  ML uses Ifpack::Chebyshev for the
-top-level smoother if you give it an Epetra matrix, so Ifpack's
-implementation (which Ifpack2 imitates) been tested in the field.
 */
 
 #include <Ifpack2_ConfigDefs.hpp>
@@ -309,9 +302,10 @@ private:
 
 // They have long names so I don't confuse them with the shorter-named
 // actual options in the body of the test.
-int numberOfIterations = 50;
+int numberOfIterations = 3;
 int numberOfEigenanalysisIterations = 15;
-int localNumberOfRows = 10000;
+//int localNumberOfRows = 10000;
+int localNumberOfRows = 5;
 
 } // namespace (anonymous)
 
@@ -370,6 +364,7 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   RCP<const Comm<int> > comm = Teuchos::DefaultComm<int>::getComm ();
   const size_t localNumRows = as<size_t> (localNumberOfRows);
   const global_size_t globalNumRows = localNumRows * comm->getSize ();
+
   const GO indexBase = 0;
   const Tpetra::LocalGlobal lg = Tpetra::GloballyDistributed;
 
@@ -414,7 +409,21 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
     ArrayView<const ST> valsView = vals.view (0, numEntries);
     A->insertGlobalValues (globalRow, colsView, valsView);
   }
+
   A->fillComplete (domainMap, rangeMap);
+RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::cout));
+
+  A->describe(*fos,Teuchos::VERB_EXTREME);
+
+  //overlap must be equal to the number of matvecs we test
+  //See https://github.com/trilinos/Trilinos/issues/7017.
+  const int OverlapLevel = numberOfIterations;
+  RCP<Ifpack2::OverlappingRowMatrix<row_matrix_type> > B;
+  try {
+    B = rcp (new Ifpack2::OverlappingRowMatrix<row_matrix_type> (A, OverlapLevel));
+  } catch (std::exception& e) {
+    out << "Ifpack2::OverlappingRowMatrix constructor threw exception: " << e.what () << endl;
+  }
 
   // See James Demmel, "Applied Numerical Linear Algebra," SIAM,
   // pp. 267-8.  The eigenvalue approximations apply to the N x N
@@ -424,7 +433,8 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   const ST pi = acos (-1.0);
   const ST N = as<ST> (globalNumRows);
   const ST lambdaMax = two * (one - cos ((pi*N) / (N+one)));
-  const ST lambdaMin = (pi / N) * (pi / N);
+  //const ST lambdaMin = (pi / N) * (pi / N);
+  const ST lambdaMin = two * (one - cos(pi/(N+one)));
   ST eigRatio = lambdaMax / lambdaMin;
   const int numIters = numberOfIterations;
   int numEigIters = numberOfEigenanalysisIterations;
@@ -460,7 +470,7 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
       << "Initial residual norm: " << maxInitResNorm << endl
       << endl;
 
-  Teuchos::ParameterList params;
+  Teuchos::ParameterList params, params2;
   // Set parameters for the various Chebyshev implementations.  The
   // above Chebyshev class understands many of the same parameters as
   // Ifpack2, Ifpack, and ML.  For this first pass, we only set the
@@ -471,13 +481,14 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   params.set ("chebyshev: max eigenvalue", lambdaMax);
 
   // Create the operators: Ifpack2, textbook Chebyshev, and custom CG.
-  prec_type ifpack2Cheby (A);
+  prec_type ifpack2Cheby (A), ifpack2Cheby_2(B);
   Ifpack2::Details::Chebyshev<ST, MV> myCheby (A);
   CG<ST, MV, crs_matrix_type> cg (A);
 
   // Residual 2-norms for comparison.
-  MT maxResNormIfpack2, maxResNormTextbook, maxResNormCg;
+  MT maxResNormIfpack2, maxResNormTextbook, maxResNormCg, maxsStepNorm;
 
+#ifdef RUN_TESTS_1_THROUGH_6
   ////////////////////////////////////////////////////////////////////
   // Test 1: set lambdaMax exactly, use default values of eigRatio and
   // lambdaMin.  Run each version of Chebyshev and compare results.
@@ -509,7 +520,7 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
-  os2 << "Results with lambdaMax = " << lambdaMax
+  os2 << "Test1: Results with lambdaMax = " << lambdaMax
       << ", default lambdaMin and eigRatio:" << endl
       << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
       << "- Textbook Chebyshev:         " << maxResNormTextbook / maxInitResNorm << endl
@@ -551,7 +562,7 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
-  os2 << "Results with lambdaMax = " << lambdaMax
+  os2 << "Test2: Results with lambdaMax = " << lambdaMax
       << ", lambdaMin = " << lambdaMin << ", eigRatio = " << eigRatio << endl
       << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
       << "- Textbook Chebyshev:         " << maxResNormTextbook / maxInitResNorm << endl
@@ -603,7 +614,7 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
-  os2 << "Results with lambdaMax = " << lambdaMax
+  os2 << "Test3: Results with lambdaMax = " << lambdaMax
       << ", default lambdaMin, eigRatio = " << eigRatio << endl
       << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
       << "- Textbook Chebyshev:         " << maxResNormTextbook / maxInitResNorm << endl
@@ -648,7 +659,7 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
-  os2 << "Results with lambdaMax = " << lambdaMax
+  os2 << "Test4: Results with lambdaMax = " << lambdaMax
       << ", default lambdaMin, eigRatio = " << eigRatio << endl
       << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
       << "- Textbook Chebyshev:         " << maxResNormTextbook / maxInitResNorm << endl
@@ -694,7 +705,7 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
-  os2 << "Results with default lambdaMax, lambdaMin, and eigRatio, "
+  os2 << "Test5: Results with default lambdaMax, lambdaMin, and eigRatio, "
     "with numEigIters = " << numEigIters << ":" << endl
       << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
       << "- Textbook Chebyshev:         " << maxResNormTextbook / maxInitResNorm << endl
@@ -745,7 +756,7 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
-  os2 << "Results with default lambdaMax, lambdaMin, and eigRatio, "
+  os2 << "Test6: Results with default lambdaMax, lambdaMin, and eigRatio, "
     "with numEigIters = " << numEigIters << ":" << endl
       << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
       << "- Textbook Chebyshev:         " << maxResNormTextbook / maxInitResNorm << endl
@@ -775,6 +786,85 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   // Print the computed max and min eigenvalues, and other details.
   os2 << endl;
   myCheby.print (os2);
+
+#endif //ifdef RUN_TESTS_1_THROUGH_6
+
+  ////////////////////////////////////////////////////////////////////
+  // Test 7: Test s-step Chebyshev by comparing it to the implementation
+  // of Chebyshev that communicates after each matrix-vector product.
+  ////////////////////////////////////////////////////////////////////
+
+/*
+  // Reset parameters.
+  params.set ("chebyshev: textbook algorithm", false);
+  params.set ("chebyshev: s-step algorithm", true);
+  params.set ("chebyshev: min eigenvalue", lambdaMin);
+  params.set ("chebyshev: ratio eigenvalue", eigRatio);
+*/
+
+  // Run Ifpack2's default version of Chebyshev.
+  x.putScalar (zero); // Reset the initial guess(es).
+  std::cout << "before (default Cheby)\n" << params << std::endl;
+  ifpack2Cheby.setParameters (params);
+  std::cout << "after (default Cheby)\n" << params << std::endl;
+  ifpack2Cheby.initialize ();
+  ifpack2Cheby.compute ();
+  ifpack2Cheby.apply (b, x);
+  r = b;
+  A->apply (x, r, Teuchos::NO_TRANS, -one, one);
+  r.norm2 (norms ());
+  maxResNormIfpack2 = *std::max_element (norms.begin (), norms.end ());
+
+
+  // Run Ifpack2's s-step version of Chebyshev.
+  x.putScalar (zero); // Reset the initial guess(es).
+  params2.set ("chebyshev: eigenvalue max iterations", numEigIters);
+  params2.set ("chebyshev: degree", numIters);
+  params2.set ("chebyshev: max eigenvalue", lambdaMax);
+  params2.set ("chebyshev: s-step algorithm", true);
+  std::cout << "before (s-step Cheby)\n" << params2 << std::endl;
+  ifpack2Cheby_2.setParameters (params2);
+  std::cout << "after (s-step Cheby)\n" << params2 << std::endl;
+  ifpack2Cheby_2.initialize ();
+  ifpack2Cheby_2.compute ();
+  ifpack2Cheby_2.apply (b, x);
+  r = b;
+  A->apply (x, r, Teuchos::NO_TRANS, -one, one);
+  r.norm2 (norms ());
+  maxsStepNorm = *std::max_element (norms.begin (), norms.end ());
+
+/*
+  // Run Ifpack2's s-step version of Chebyshev.
+  ifpack2Cheby.setParameters (params);
+  ifpack2Cheby.initialize ();
+  ifpack2Cheby.compute ();
+  ifpack2Cheby.apply (b, x);
+  r = b;
+  A->apply (x, r, Teuchos::NO_TRANS, -one, one);
+  r.norm2 (norms ());
+  maxsStepNorm = *std::max_element (norms.begin (), norms.end ());
+
+  // Run Ifpack2's default version of Chebyshev.
+  x.putScalar (zero); // Reset the initial guess(es).
+  params.set ("chebyshev: s-step algorithm", false);
+  myCheby.setParameters (params);
+  myCheby.compute ();
+  (void) myCheby.apply (b, x);
+  r = b;
+  A->apply (x, r, Teuchos::NO_TRANS, -one, one);
+  r.norm2 (norms ());
+  maxResNormIfpack2 = *std::max_element (norms.begin (), norms.end ());
+*/
+
+  // Run CG, just to compare.
+  x.putScalar (zero); // Reset the initial guess(es).
+  cg.setParameters (params);
+  maxResNormCg = cg.apply (b, x);
+
+  os2 << "Test7: Results with lambdaMax = " << lambdaMax
+      << ", lambdaMin = " << lambdaMin << ", eigRatio = " << eigRatio << endl
+      << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
+      << "- s-step Chebyshev:           " << maxsStepNorm / maxInitResNorm << endl
+      << "- CG:                         " << maxResNormCg / maxInitResNorm << endl;
+
 }
-
-

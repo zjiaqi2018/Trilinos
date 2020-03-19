@@ -87,27 +87,32 @@ private:
   using vector_type = Tpetra::Vector<SC, LO, GO, NT>;
 
 public:
-  sStepChebyshevKernel (const Teuchos::RCP<const crs_matrix_type>& localCrs,
+  sStepChebyshevKernel (
+                        const Teuchos::RCP<const operator_type>& matrix,
+                        const Teuchos::RCP<const crs_matrix_type>& localCrs,
                         const Teuchos::RCP<const crs_matrix_type>& ghostCrs);
 
   void
-  setMatrix (const Teuchos::RCP<const crs_matrix_type>& localCrs,
+  setMatrix ( const Teuchos::RCP<const operator_type>& A,
+             const Teuchos::RCP<const crs_matrix_type>& localCrs,
              const Teuchos::RCP<const crs_matrix_type>& ghostCrs);
 
   void
-  compute (multivector_type& W,
+  apply (multivector_type& W,
            const SC& alpha,
            vector_type& D_inv,
            multivector_type& B,
            multivector_type& X,
            const SC& beta,
-           const size_t &halo_start);
+           Teuchos::ArrayView<const size_t> &hstarts,
+           const int &hind,
+           const int &rank);
 
 private:
   using import_type = Tpetra::Import<LO, GO, NT>;
   using export_type = Tpetra::Export<LO, GO, NT>;
 
-  //Teuchos::RCP<const operator_type> A_op_;
+  Teuchos::RCP<const operator_type> A_op_;
   Teuchos::RCP<const crs_matrix_type> locA_;
   Teuchos::RCP<const crs_matrix_type> extA_;
   Teuchos::RCP<const crs_matrix_type> A_crs_;
@@ -130,8 +135,7 @@ private:
                const SC& alpha,
                vector_type& D_inv,
                multivector_type& B,
-               const crs_matrix_type& locA,
-               const crs_matrix_type& extA,
+               const operator_type& A,
                multivector_type& X,
                const SC& beta);
 
@@ -143,7 +147,10 @@ private:
              const crs_matrix_type& locA,
              const crs_matrix_type& extA,
              vector_type& X,
-             const SC& beta);
+             const SC& beta,
+             Teuchos::ArrayView<const size_t> &hstarts,
+             const int &hind,
+             const int &rank);
 };
 
 } // namespace Details

@@ -802,11 +802,9 @@ Chebyshev<ScalarType, MV>::compute ()
     */
     hstarts_ = overlappingA_->getExtHaloStarts();
     RCP<const map_type> ovRowmap = overlappingA_->getRowMap();
-    RCP<const map_type> ovColmap = overlappingA_->getColMap();
     //create two overlapping solution "work" vectors
     ovX_.push_back(rcp(new MV(ovRowmap, numberOfMultiVectors_))); 
     ovX_.push_back(rcp(new MV(ovRowmap, numberOfMultiVectors_))); 
-
   }
 
 
@@ -1337,8 +1335,12 @@ ifpackApplyImpl (const op_type& A,
   }
 
   // Fetch cached temporary (multi)vector.
+  makeTempMultiVector(B.getMap(), B.getNumVectors(), W_);
+  MV& W = *W_;
+/*
   Teuchos::RCP<MV> W_ptr = makeTempMultiVector (B);
   MV& W = *W_ptr;
+*/
 
   if (debug) {
     *out_ << " Iteration " << 1 << ":" << endl
@@ -1355,7 +1357,7 @@ ifpackApplyImpl (const op_type& A,
     }
     // W := (1/theta)*D_inv*(B-A*X) and X := X + W.
     // X := X + W
-    ck_->compute (W, one/theta, const_cast<V&> (D_inv),
+    ck_->apply(W, one/theta, const_cast<V&> (D_inv),
                    const_cast<MV&> (B), X, zero);
   }
   else {
@@ -1397,7 +1399,7 @@ ifpackApplyImpl (const op_type& A,
 
     // W := dtemp2*D_inv*(B - A*X) + dtemp1*W.
     // X := X + W
-    ck_->compute (W, dtemp2, const_cast<V&> (D_inv),
+    ck_->apply(W, dtemp2, const_cast<V&> (D_inv),
                    const_cast<MV&> (B), (X), dtemp1);
 
     if (debug) {
@@ -1437,6 +1439,23 @@ sStepApplyImpl (const MV& B, MV& X)
     return;
   }
 
+  //Single up-front import
+  makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), ovX_[0]);
+  makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), ovX_[1]);
+  //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), ovX_[0]);
+  //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), ovX_[1]);
+  overlappingA_->importMultiVector(X,*(ovX_[0]));
+
+  makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), ovB_);
+  //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), ovB_);
+  overlappingA_->importMultiVector(B,*ovB_);
+
+  //makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), ovD_);
+  //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), ovD_);
+  if (ovD_.is_null ())
+    ovD_ = Teuchos::rcp(new V(overlappingA_->getRowMap (), true));
+  overlappingA_->importMultiVector(*D_,*ovD_);
+
   // Initialize coefficients
   const ST alpha = lambdaMaxForApply_ / eigRatioForApply_;
   const ST beta = boostFactor_ * lambdaMaxForApply_;
@@ -1453,31 +1472,39 @@ sStepApplyImpl (const MV& B, MV& X)
   }
 
   // Fetch cached temporary (multi)vector.
-  Teuchos::RCP<MV> W_ptr = makeTempMultiVector (B);
-  MV& W = *W_ptr;
+  //Teuchos::RCP<MV> W_ptr = makeTempMultiVector (ovB_);
+  makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), W_);
+  //MV& W = *W_ptr;
+  //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), W_);
+  MV& W = *W_;
 
   if (debug) {
     *out_ << " Iteration " << 1 << ":" << endl
           << " - \\|D\\|_{\\infty} = " << D_->normInf () << endl;
   }
+  int rank = overlappingA_->getComm()->getRank();
 
   // Special case for the first iteration.
-  if (! zeroStartingSolution_) {
+  //if (! zeroStartingSolution_) { FIXME
+  if (true) {
     // mfh 22 May 2019: Tests don't actually exercise this path.
+    std::cout << "Iteration 0 (nonzero init guess)" << std::endl;
 
     if (sck_.is_null ()) {
-      //Teuchos::RCP<const op_type> A_op = A_;
+      Teuchos::RCP<const op_type> A_op = A_;
       //FIXME why template on op_type?
-      sck_ = Teuchos::rcp (new sStepChebyshevKernel<op_type>(undA_, extA_));
+      sck_ = Teuchos::rcp (new sStepChebyshevKernel<op_type>(A_op, undA_, extA_));
     }
     // W := (1/theta)**D_*(B-A*X) and X := X + W.
     // X := X + W
-    sck_->compute (W, one/theta, const_cast<V&> (*D_),
-                   const_cast<MV&> (B), X, zero, hstarts_[numIters_-1]); //TODO check this
+    sck_->apply(W, one/theta, const_cast<V&> (*ovD_),
+                const_cast<MV&> (*ovB_), *ovX_[0], zero, hstarts_, numIters_-1, rank);
+                //const_cast<MV&> (*ovB_), *ovX_[0], zero, hstarts_[numIters_-1]); //TODO check this
   }
   else {
     // W := (1/theta)**D_*B and X := 0 + W.
-    firstIterationWithZeroStartingSolution (W, one/theta, *D_, B, X);
+    std::cout << "Iteration 0 (zero init guess)" << std::endl;
+    firstIterationWithZeroStartingSolution (W, one/theta, *ovD_, *ovB_, *ovX_[0]);
   }
 
   if (debug) {
@@ -1486,15 +1513,16 @@ sStepApplyImpl (const MV& B, MV& X)
   }
 
   if (numIters_ > 1 && sck_.is_null ()) {
-    //Teuchos::RCP<const op_type> A_op = A_;
+    Teuchos::RCP<const op_type> A_op = A_;
     //FIXME why template on op_type?
-    sck_ = Teuchos::rcp (new sStepChebyshevKernel<op_type> (undA_, extA_));
+    sck_ = Teuchos::rcp (new sStepChebyshevKernel<op_type> (A_op, undA_, extA_));
   }
 
   // The rest of the iterations.
   ST rhok = one / s1;
   ST rhokp1, dtemp1, dtemp2;
   for (int deg = 1; deg < numIters_; ++deg) {
+    std::cout << "Iteration " << deg << std::endl;
     if (debug) {
       *out_ << " Iteration " << deg+1 << ":" << endl
             << " - \\|D\\|_{\\infty} = " << D_->normInf () << endl
@@ -1513,17 +1541,23 @@ sStepApplyImpl (const MV& B, MV& X)
             << " - dtemp2 = " << dtemp2 << endl;
     }
 
+    std::cout << "numIters_-deg-1=" << numIters_-deg-1 << std::endl;
+
     // W := dtemp2**D_*(B - A*X) + dtemp1*W.
     // X := X + W
-    sck_->compute (W, dtemp2, const_cast<V&> (*D_),
-                   const_cast<MV&> (B), (X), dtemp1, hstarts_[numIters_-deg-1]);
+//    std::cout << "pid " << overlappingA_->getComm()->getRank() << ": deg=" << deg << "    " << "hstarts[" << numIters_-deg-1 << "]=" << hstarts_[numIters_-deg-1] << std::endl;
+    sck_->apply(W, dtemp2, const_cast<V&> (*ovD_),
+                   const_cast<MV&> (*ovB_), *(ovX_[0]), dtemp1, hstarts_, numIters_-deg-1, rank);
+                   //const_cast<MV&> (*ovB_), *(ovX_[0]), dtemp1, hstarts_[numIters_-deg-1]);
                                                            // ^^^^^^^^^^^^^^^  TODO triple check this
+    ovX_[0]->update (one, W, one); // X := X + W
 
     if (debug) {
       *out_ << " - \\|W\\|_{\\infty} = " << maxNormInf (W) << endl
             << " - \\|X\\|_{\\infty} = " << maxNormInf (X) << endl;
     }
   }
+  overlappingA_->exportMultiVector(*ovX_[0],X,Tpetra::ZERO);
 } //sStepApplyImpl
 
 template<class ScalarType, class MV>
@@ -1674,6 +1708,7 @@ hasTransposeApply () const {
   return true;
 }
 
+/*
 template<class ScalarType, class MV>
 Teuchos::RCP<MV>
 Chebyshev<ScalarType, MV>::
@@ -1689,6 +1724,39 @@ makeTempMultiVector (const MV& B)
     W_ = Teuchos::rcp (new MV (B.getMap (), B_numVecs, true));
   }
   return W_;
+}
+*/
+
+/*
+template<class ScalarType, class MV>
+void
+Chebyshev<ScalarType, MV>::
+makeTempVector(Teuchos::RCP<const map_type> map, const size_t &numVecs, Teuchos::RCP<MV>& W)
+{
+  // ETP 02/08/17:  We must check not only if the temporary vectors are
+  // null, but also if the number of columns match, since some multi-RHS
+  // solvers (e.g., Belos) may call apply() with different numbers of columns.
+
+  //W must be initialized to zero when it is used as a multigrid smoother.
+  if (W.is_null () || W->getNumVectors () != numVecs) {
+    W = Teuchos::rcp (new MV(map, numVecs, true));
+  }
+}
+*/
+
+template<class ScalarType, class MV>
+void
+Chebyshev<ScalarType, MV>::
+makeTempMultiVector (Teuchos::RCP<const map_type> map, const size_t &numVecs, Teuchos::RCP<MV>& W)
+{
+  // ETP 02/08/17:  We must check not only if the temporary vectors are
+  // null, but also if the number of columns match, since some multi-RHS
+  // solvers (e.g., Belos) may call apply() with different numbers of columns.
+
+  //W must be initialized to zero when it is used as a multigrid smoother.
+  if (W.is_null () || W->getNumVectors () != numVecs) {
+    W = Teuchos::rcp (new MV(map, numVecs, true));
+  }
 }
 
 template<class ScalarType, class MV>

@@ -43,6 +43,8 @@
 #ifndef IFPACK2_OVERLAPPINGROWMATRIX_DEF_HPP
 #define IFPACK2_OVERLAPPINGROWMATRIX_DEF_HPP
 
+#include <unistd.h>
+
 #include <sstream>
 
 #include <Ifpack2_Details_OverlappingRowGraph.hpp>
@@ -182,6 +184,21 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
     ExtMatrix_ = ExtMatrix_nc; // we only need the const version after here
   }
 
+/*
+*/
+  sleep(1);
+  A_->getComm()->barrier();
+  RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::cout));
+  fos->setOutputToRootOnly(0);
+  *fos << "============= ExtMatrix_ ============" << std::endl;
+  sleep(1);
+  A_->getComm()->barrier();
+  fos->setOutputToRootOnly(-1);
+  ExtMatrix_->describe(*fos,Teuchos::VERB_EXTREME);
+  fos->setOutputToRootOnly(0);
+  *fos << "============= end of ExtMatrix_ ============" << std::endl;
+  sleep(1);
+  A_->getComm()->barrier();
   // fix indices for overlapping matrix
   const size_t numMyRowsB = ExtMatrix_->getNodeNumRows ();
 
@@ -597,7 +614,7 @@ void
 OverlappingRowMatrix<MatrixType>::
 importMultiVector (const Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type> &X,
                    Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type> &OvX,
-                   Tpetra::CombineMode CM)
+                   Tpetra::CombineMode CM) const
 {
   OvX.doImport (X, *Importer_, CM);
 }
@@ -608,7 +625,7 @@ void
 OverlappingRowMatrix<MatrixType>::
 exportMultiVector (const Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type> &OvX,
                    Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type> &X,
-                   Tpetra::CombineMode CM)
+                   Tpetra::CombineMode CM) const
 {
   X.doExport (OvX, *Importer_, CM);
 }

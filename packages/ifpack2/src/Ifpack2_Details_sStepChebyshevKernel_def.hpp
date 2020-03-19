@@ -55,6 +55,8 @@
 #include "Teuchos_Assert.hpp"
 #include <type_traits>
 
+#define RANKPRINT rank==1
+
 namespace Ifpack2 {
 namespace Details {
 namespace Impl {
@@ -67,11 +69,9 @@ template<class WVector,
          class DVector,
          class BVector,
          class AMatrix,
-         class XVector_colMap,
-         class XVector_domMap,
+         class XVector,
          class Scalar,
-         bool use_beta,
-         bool do_X_update>
+         bool use_beta>
 struct sStepChebyshevKernelVectorFunctor {
   static_assert (static_cast<int> (WVector::Rank) == 1,
                  "WVector must be a rank 1 View.");
@@ -79,10 +79,8 @@ struct sStepChebyshevKernelVectorFunctor {
                  "DVector must be a rank 1 View.");
   static_assert (static_cast<int> (BVector::Rank) == 1,
                  "BVector must be a rank 1 View.");
-  static_assert (static_cast<int> (XVector_colMap::Rank) == 1,
-                 "XVector_colMap must be a rank 1 View.");
-  static_assert (static_cast<int> (XVector_domMap::Rank) == 1,
-                 "XVector_domMap must be a rank 1 View.");
+  static_assert (static_cast<int> (XVector::Rank) == 1,
+                 "XVector must be a rank 1 View.");
 
   using execution_space = typename AMatrix::execution_space;
   using LO = typename AMatrix::non_const_ordinal_type;
@@ -96,39 +94,53 @@ struct sStepChebyshevKernelVectorFunctor {
   DVector m_d;
   BVector m_b;
   AMatrix m_A;
-  XVector_colMap m_x_colMap;
-  XVector_domMap m_x_domMap;
+  XVector m_x;
   const Scalar beta;
 
   const LO rows_per_team;
+  const int rank;
+  const int numLocalRows;
 
   sStepChebyshevKernelVectorFunctor (const Scalar& alpha_,
                                      const WVector& m_w_,
                                      const DVector& m_d_,
                                      const BVector& m_b_,
                                      const AMatrix& m_A_,
-                                     const XVector_colMap& m_x_colMap_,
-                                     const XVector_domMap& m_x_domMap_,
+                                     const XVector& m_x_,
                                      const Scalar& beta_,
-                                     const int rows_per_team_) :
+                                     const int rows_per_team_,
+                                     const int rank,
+                                     const int numLocalRows) :
     alpha (alpha_),
     m_w (m_w_),
     m_d (m_d_),
     m_b (m_b_),
     m_A (m_A_),
-    m_x_colMap (m_x_colMap_),
-    m_x_domMap (m_x_domMap_),
+    m_x (m_x_),
     beta (beta_),
-    rows_per_team (rows_per_team_)
+    rows_per_team (rows_per_team_),
+    rank(rank),
+    numLocalRows(numLocalRows)
   {
     const size_t numRows = m_A.numRows ();
     const size_t numCols = m_A.numCols ();
 
+    const size_t m_d_extent = size_t(m_d.extent(0));
+    const size_t m_b_extent = size_t(m_b.extent(0));
+    const size_t m_w_extent = size_t(m_w.extent(0));
+    const size_t m_x_extent = size_t(m_x.extent(0));
+    std::cout << "(" << rank << ") m_d=" << m_d_extent << ",m_b="
+              << m_b_extent << ",m_w="
+              << m_w_extent << ",m_x="
+              << m_x_extent << ",numRows="
+              << numRows << ",numCols="
+              << numCols << ",numLocalRows="
+              << numLocalRows << std::endl;
+
     TEUCHOS_ASSERT( m_w.extent (0) == m_d.extent (0) );
     TEUCHOS_ASSERT( m_w.extent (0) == m_b.extent (0) );
-    TEUCHOS_ASSERT( numRows == size_t (m_w.extent (0)) );
-    TEUCHOS_ASSERT( numCols <= size_t (m_x_colMap.extent (0)) );
-    TEUCHOS_ASSERT( numRows <= size_t (m_x_domMap.extent (0)) );
+    //TEUCHOS_ASSERT( numRows == size_t (m_w.extent (0)) );
+    //TEUCHOS_ASSERT( numCols <= size_t (m_x.extent (0)) );
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -142,23 +154,35 @@ struct sStepChebyshevKernelVectorFunctor {
        [&] (const LO& loop) {
          const LO lclRow =
            static_cast<LO> (dev.league_rank ()) * rows_per_team + loop;
-         if (lclRow >= m_A.numRows ()) {
+         if (lclRow >= numLocalRows) {
            return;
          }
+         if (RANKPRINT)
+         printf("  [%d] lclRow=%d, dev.league_rank=%d, rows_per_team=%d, loop=%d\n",rank,lclRow,
+                dev.league_rank (), rows_per_team, loop);
+         fflush(stdout);
          const auto A_row = m_A.rowConst(lclRow);
          const LO row_length = static_cast<LO> (A_row.length);
          residual_value_type A_x = KAT::zero ();
 
-         Kokkos::parallel_reduce
-           (Kokkos::ThreadVectorRange (dev, row_length),
-            [&] (const LO iEntry, residual_value_type& lsum) {
+         Kokkos::parallel_reduce (Kokkos::ThreadVectorRange (dev, row_length), [&] (const LO iEntry, residual_value_type& lsum) {
               const auto A_val = A_row.value(iEntry);
-              lsum += A_val * m_x_colMap(A_row.colidx(iEntry));
+              //printf("iEntry=%d\n",iEntry);
+              if (RANKPRINT)
+              printf("  [%d] A_row.colidx(%d)=%d\n",rank, iEntry,A_row.colidx(iEntry));
+              fflush(stdout);
+              lsum += A_val * m_x(A_row.colidx(iEntry));
             }, A_x);
 
          Kokkos::single
            (Kokkos::PerThread(dev),
             [&] () {
+              if (RANKPRINT)
+              printf("  [%d] lclRow=%d, m_d.extend(0)=%lu, m_b.extent(0)=%lu, A.numRows=%d, m_w.extent()=%lu, m_x.extent()=%lu\n",rank,lclRow,m_d.extent(0),m_b.extent(0),m_A.numRows(),m_w.extent(0),m_x.extent(0));
+              fflush(stdout);
+              //printf("[%d] DO NOTHING lclRow=%d, m_d.extend(0)=%d, m_b.extent(0)=%d\n",rank,lclRow,m_d.extent(0),m_b.extent(0));
+#define SKIPFORNOW
+#ifdef SKIPFORNOW
               const auto alpha_D_res =
                 alpha * m_d(lclRow) * (m_b(lclRow) - A_x);
               if (use_beta) {
@@ -167,8 +191,7 @@ struct sStepChebyshevKernelVectorFunctor {
               else {
                 m_w(lclRow) = alpha_D_res;
               }
-              if (do_X_update)
-                m_x_domMap(lclRow) += m_w(lclRow);
+#endif
             });
        });
   }
@@ -247,8 +270,7 @@ template<class WVector,
          class DVector,
          class BVector,
          class AMatrix,
-         class XVector_colMap,
-         class XVector_domMap,
+         class XVector,
          class Scalar>
 static void
 sstep_chebyshev_kernel_vector
@@ -257,10 +279,10 @@ sstep_chebyshev_kernel_vector
  const DVector& d,
  const BVector& b,
  const AMatrix& A,
- const XVector_colMap& x_colMap,
- const XVector_domMap& x_domMap,
+ const XVector& x,
  const Scalar& beta,
- const bool do_X_update)
+ const int rank, 
+ const int numLocalRows)
 {
   using execution_space = typename AMatrix::execution_space;
 
@@ -274,7 +296,8 @@ sstep_chebyshev_kernel_vector
 
   const int64_t rows_per_team =
     sstep_chebyshev_kernel_vector_launch_parameters<execution_space>
-      (A.numRows (), A.nnz (), rows_per_thread, team_size, vector_length);
+      //(A.numRows (), A.nnz (), rows_per_thread, team_size, vector_length);
+      (numLocalRows, A.nnz (), rows_per_thread, team_size, vector_length);
   int64_t worksets = (b.extent (0) + rows_per_team - 1) / rows_per_team;
 
   using Kokkos::Dynamic;
@@ -295,57 +318,28 @@ sstep_chebyshev_kernel_vector
   using d_vec_type = typename DVector::const_type;
   using b_vec_type = typename BVector::const_type;
   using matrix_type = AMatrix;
-  using x_colMap_vec_type = typename XVector_colMap::const_type;
-  using x_domMap_vec_type = typename XVector_domMap::non_const_type;
+  using x_vec_type = typename XVector::const_type;
   using scalar_type = typename Kokkos::ArithTraits<Scalar>::val_type;
 
   if (beta == Kokkos::ArithTraits<Scalar>::zero ()) {
     constexpr bool use_beta = false;
-    if (do_X_update) {
-      using functor_type =
-        sStepChebyshevKernelVectorFunctor<w_vec_type, d_vec_type,
-                                     b_vec_type, matrix_type,
-                                     x_colMap_vec_type, x_domMap_vec_type,
-                                     scalar_type,
-                                     use_beta,
-                                     true>;
-      functor_type func (alpha, w, d, b, A, x_colMap, x_domMap, beta, rows_per_team);
-      Kokkos::parallel_for (kernel_label, policy, func);
-    } else {
-      using functor_type =
-        sStepChebyshevKernelVectorFunctor<w_vec_type, d_vec_type,
-                                     b_vec_type, matrix_type,
-                                     x_colMap_vec_type, x_domMap_vec_type,
-                                     scalar_type,
-                                     use_beta,
-                                     false>;
-      functor_type func (alpha, w, d, b, A, x_colMap, x_domMap, beta, rows_per_team);
-      Kokkos::parallel_for (kernel_label, policy, func);
-    }
+    using functor_type =
+      sStepChebyshevKernelVectorFunctor<w_vec_type, d_vec_type,
+                                        b_vec_type, matrix_type,
+                                        x_vec_type, scalar_type,
+                                        use_beta>;
+    functor_type func (alpha, w, d, b, A, x, beta, rows_per_team, rank, numLocalRows);
+    Kokkos::parallel_for (kernel_label, policy, func);
   }
   else {
     constexpr bool use_beta = true;
-    if (do_X_update) {
-      using functor_type =
-        sStepChebyshevKernelVectorFunctor<w_vec_type, d_vec_type,
-                                     b_vec_type, matrix_type,
-                                     x_colMap_vec_type, x_domMap_vec_type,
-                                     scalar_type,
-                                     use_beta,
-                                     true>;
-      functor_type func (alpha, w, d, b, A, x_colMap, x_domMap, beta, rows_per_team);
-      Kokkos::parallel_for (kernel_label, policy, func);
-    } else {
-      using functor_type =
-        sStepChebyshevKernelVectorFunctor<w_vec_type, d_vec_type,
-                                     b_vec_type, matrix_type,
-                                     x_colMap_vec_type, x_domMap_vec_type,
-                                     scalar_type,
-                                     use_beta,
-                                     false>;
-      functor_type func (alpha, w, d, b, A, x_colMap, x_domMap, beta, rows_per_team);
-      Kokkos::parallel_for (kernel_label, policy, func);
-    }
+    using functor_type =
+      sStepChebyshevKernelVectorFunctor<w_vec_type, d_vec_type,
+                                        b_vec_type, matrix_type,
+                                        x_vec_type, scalar_type,
+                                        use_beta>;
+    functor_type func (alpha, w, d, b, A, x, beta, rows_per_team, rank, numLocalRows);
+    Kokkos::parallel_for (kernel_label, policy, func);
   }
 } //sstep_chebyshev_kernel_vector
 
@@ -354,19 +348,22 @@ sstep_chebyshev_kernel_vector
 template<class TpetraOperatorType>
 sStepChebyshevKernel<TpetraOperatorType>::
 sStepChebyshevKernel (
-                      const Teuchos::RCP<const crs_matrix_type>& locA,
+                      const Teuchos::RCP<const operator_type>& A,
                       const Teuchos::RCP<const crs_matrix_type>& locA,
                       const Teuchos::RCP<const crs_matrix_type>& extA)
 {
-  setMatrix (locA,extA);
+  setMatrix (A,locA,extA);
 }
 
 template<class TpetraOperatorType>
 void
 sStepChebyshevKernel<TpetraOperatorType>::
-setMatrix (const Teuchos::RCP<const crs_matrix_type>& locA,
+setMatrix (
+           const Teuchos::RCP<const operator_type>& A,
+           const Teuchos::RCP<const crs_matrix_type>& locA,
            const Teuchos::RCP<const crs_matrix_type>& extA)
 {
+  A_op_ = A;
   locA_ = locA;
   extA_ = extA;
 }
@@ -406,13 +403,14 @@ setMatrix (const Teuchos::RCP<const operator_type>& A)
 template<class TpetraOperatorType>
 void
 sStepChebyshevKernel<TpetraOperatorType>::
-compute (multivector_type& W,
+apply (multivector_type& W,
          const SC& alpha,
          vector_type& D_inv,
          multivector_type& B,
          multivector_type& X,
          const SC& beta,
-         const size_t &halo_start)
+         Teuchos::ArrayView<const size_t> &hstarts, const int &hind, const int &rank)
+         //const size_t &halo_start)
 {
   using Teuchos::RCP;
   using Teuchos::rcp;
@@ -431,14 +429,17 @@ compute (multivector_type& W,
       viewX_ = X.getLocalViewHost();
       X_vec_ = X.getVectorNonConst (0);
     }
-    TEUCHOS_ASSERT( ! A_crs_.is_null () );
-    fusedCase (*W_vec_, alpha, D_inv, *B_vec_, *locA_, *extA_, *X_vec_, beta);
+    //TEUCHOS_ASSERT( ! A_crs_.is_null () );
+    TEUCHOS_ASSERT( ! locA_.is_null () );
+    TEUCHOS_ASSERT( ! extA_.is_null () );
+    //fusedCase (*W_vec_, alpha, D_inv, *B_vec_, *locA_, *extA_, *X_vec_, beta, halo_start);
+    fusedCase (*W_vec_, alpha, D_inv, *B_vec_, *locA_, *extA_, *X_vec_, beta, hstarts, hind, rank);
   }
   else {
-    //TEUCHOS_ASSERT( ! A_op_.is_null () );
-    unfusedCase (W, alpha, D_inv, B, *locA_, *extA_, *X_vec_, beta);
+    TEUCHOS_ASSERT( ! A_op_.is_null () );
+    unfusedCase (W, alpha, D_inv, B, *A_op_, *X_vec_, beta);
   }
-} //compute
+} //apply
 
 #ifdef OLD_APPROACH_COMMUNICATION_NEEDED
 template<class TpetraOperatorType>
@@ -465,8 +466,11 @@ bool
 sStepChebyshevKernel<TpetraOperatorType>::
 canFuse (const multivector_type& B) const
 {
+//  return B.getNumVectors () == size_t (1) &&
+//    ! A_crs_.is_null () &&
+//    exp_.is_null ();
   return B.getNumVectors () == size_t (1) &&
-    ! A_crs_.is_null () &&
+    ! locA_.is_null () &&
     exp_.is_null ();
 }
 
@@ -477,8 +481,7 @@ unfusedCase (multivector_type& W,
              const SC& alpha,
              vector_type& D_inv,
              multivector_type& B,
-             const crs_matrix_type& locA,
-             const crs_matrix_type& extA,
+             const operator_type& A,
              multivector_type& X,
              const SC& beta)
 {
@@ -497,8 +500,6 @@ unfusedCase (multivector_type& W,
   // W := alpha * D_inv * V1 + beta * W
   W.elementWiseMultiply (alpha, D_inv, *V1_, beta);
 
-  // X := X + W
-  X.update (STS::one(), W, STS::one());
 } //sStepChebyshevKernel::unfusedCase
 
 template<class TpetraOperatorType>
@@ -512,29 +513,39 @@ fusedCase (vector_type& W,
            const crs_matrix_type& extA,
            vector_type& X,
            const SC& beta,
-           const Teuchos::ArrayView<const size_t>& halos)
+           Teuchos::ArrayView<const size_t> &hstarts,
+           const int &hind,
+           const int &rank)
 {
-  vector_type& X_colMap = importVector (X);
 
+#if 0 //INCORRECT_LOCAL_VIEWS
   //FIXME do halo stuff here
-/*
-  int yrange = hstarts[overlapLevel];
-  auto Y_ext = Kokkos::subview(Y_lcl,std::make_pair(numLocalRows,numLocalRows+yrange),Kokkos::ALL());
-  int xlimit = ( (overlapLevel == hstarts.size()-1) ? X_lcl.extent(0) : numLocalRows+hstarts[overlapLevel+1] );
+  int yrange = hstarts[hind];
+  auto B_lcl = B.getLocalViewDevice ();
+  auto W_lcl = W.getLocalViewDevice ();
+  auto X_lcl = X.getLocalViewDevice ();
+  auto Dinv_lcl = D_inv.getLocalViewDevice ();
+  auto numLocalRows = locA.getNodeNumRows();
+
+  auto W_ext = Kokkos::subview(W_lcl,std::make_pair(numLocalRows,numLocalRows+yrange),Kokkos::ALL());
+  auto B_ext = Kokkos::subview(B_lcl,std::make_pair(numLocalRows,numLocalRows+yrange),Kokkos::ALL());
+  auto Dinv_ext = Kokkos::subview(Dinv_lcl,std::make_pair(numLocalRows,numLocalRows+yrange),Kokkos::ALL());
+  int xlimit = ( (hind == hstarts.size()-1) ? X_lcl.extent(0) : numLocalRows+hstarts[hind+1] );
   auto X_ext = Kokkos::subview(X_lcl,std::make_pair(0,xlimit),Kokkos::ALL());
-*/
+#endif
+
+  //auto numLocalRows = hstarts[hind];
+  auto numLocalRows = locA.getNodeNumRows();
+  int yrange = hstarts[hind];
+
+  //TODO JHU working in here 6-Mar-2020
+  // W = B - A*X
 
   // Only need these aliases because we lack C++14 generic lambdas.
   using Tpetra::with_local_access_function_argument_type;
-  using ro_lcl_vec_type =
-    with_local_access_function_argument_type<
-      decltype (readOnly (B))>;
-  using wo_lcl_vec_type =
-    with_local_access_function_argument_type<
-      decltype (writeOnly (B))>;
-  using rw_lcl_vec_type =
-    with_local_access_function_argument_type<
-      decltype (readWrite (B))>;
+  using ro_lcl_vec_type = with_local_access_function_argument_type< decltype (readOnly (B))>;
+  using wo_lcl_vec_type = with_local_access_function_argument_type< decltype (writeOnly (B))>;
+  using rw_lcl_vec_type = with_local_access_function_argument_type< decltype (readWrite (B))>;
 
   using Tpetra::withLocalAccess;
   using Tpetra::readOnly;
@@ -545,47 +556,121 @@ fusedCase (vector_type& W,
 
   auto A_lcl = locA.getLocalMatrix ();
   auto A_ext = extA.getLocalMatrix ();
-  const bool do_X_update = !imp_.is_null ();
   if (beta == STS::zero ()) {
+
+  if (RANKPRINT)
+  printf("(beta=0) [%d] local matvec\n", rank);
+  fflush(stdout);
+    // matrix, local part
     withLocalAccess
       ([&] (const wo_lcl_vec_type& W_lcl,
-            const ro_lcl_vec_type& D_lcl,
+            const ro_lcl_vec_type& D_inv_lcl,
             const ro_lcl_vec_type& B_lcl,
-            const ro_lcl_vec_type& X_colMap_lcl,
-            const wo_lcl_vec_type& X_domMap_lcl) {
-         sstep_chebyshev_kernel_vector (alpha, W_lcl, D_lcl,
-                                  B_lcl, A_lcl,
-                                  X_colMap_lcl, X_domMap_lcl,
-                                  beta,
-                                  do_X_update);
+            const ro_lcl_vec_type& X_lcl) {
+         sstep_chebyshev_kernel_vector (alpha, W_lcl, D_inv_lcl,
+                                        B_lcl, A_lcl, X_lcl, beta, rank, A_lcl.numRows());
        },
        writeOnly (W),
        readOnly (D_inv),
        readOnly (B),
-       readOnly (X_colMap),
+       readOnly (X)); 
+       //writeOnly (X));
+
+    // matrix, halo part
+    if (hind>0) //overlap > 0
+    withLocalAccess
+      ([&] (const wo_lcl_vec_type& W_lcl,
+            const ro_lcl_vec_type& D_inv_lcl,
+            const ro_lcl_vec_type& B_lcl,
+            const wo_lcl_vec_type& X_lcl) {
+         //maybe doesn't like auto?
+         //auto W_ext = Kokkos::subview(W_lcl,std::make_pair(numLocalRows,numLocalRows+yrange),Kokkos::ALL());
+    if (RANKPRINT) {
+    printf("Halo Starts:");
+    for(size_t i=0; i< (size_t)hstarts.size(); i++)
+      printf("%d ",(int) hstarts[i]);
+    printf("\n");
+    fflush(stdout);
+    }
+         auto W_ext = Kokkos::subview(W_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
+         auto B_ext = Kokkos::subview(B_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
+         auto Dinv_ext = Kokkos::subview(D_inv_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
+         int xlimit = ( (hind == hstarts.size()-1) ? X_lcl.extent(0) : numLocalRows+hstarts[hind+1] );
+         auto X_ext = Kokkos::subview(X_lcl,std::make_pair(0,xlimit));
+  if (RANKPRINT) {
+  printf("(beta=0) [%d] overlapped matvec\n", rank);
+  printf("(beta=0) [%d] numLocalRows=%lu, hind=%d, yrange=%d, xlimit=%d, A_ext.numRows=%d, hstarts[hind+1]=%d\n", rank, numLocalRows, hind, yrange,xlimit,A_ext.numRows(),hstarts[hind+1]);
+  fflush(stdout);
+  }
+         sstep_chebyshev_kernel_vector (alpha, W_ext, Dinv_ext,
+                                        B_ext, A_ext, X_ext, beta, rank, yrange);
+                                        //B_ext, A_ext, X_ext, beta, rank, numLocalRows);
+       },
+       writeOnly (W),
+       readOnly (D_inv),
+       readOnly (B),
        writeOnly (X));
   }
   else { // need to read _and_ write W if beta != 0
+/*
     withLocalAccess
       ([&] (const rw_lcl_vec_type& W_lcl,
             const ro_lcl_vec_type& D_lcl,
             const ro_lcl_vec_type& B_lcl,
-            const ro_lcl_vec_type& X_colMap_lcl,
-            const wo_lcl_vec_type& X_domMap_lcl) {
+            const ro_lcl_vec_type& X_lcl) {
          sstep_chebyshev_kernel_vector (alpha, W_lcl, D_lcl,
-                                  B_lcl, A_lcl,
-                                  X_colMap_lcl, X_domMap_lcl,
-                                  beta,
-                                  do_X_update);
+                                        B_lcl, A_lcl, X_lcl, beta);
        },
        readWrite (W),
        readOnly (D_inv),
        readOnly (B),
-       readOnly (X_colMap),
+       readOnly (X));
+*/
+    // matrix, local part
+    if (RANKPRINT)
+    printf("(beta!=0) [%d] local matvec\n", rank);
+    fflush(stdout);
+    withLocalAccess
+      ([&] (const rw_lcl_vec_type& W_lcl,
+            const ro_lcl_vec_type& D_inv_lcl,
+            const ro_lcl_vec_type& B_lcl,
+            const ro_lcl_vec_type& X_lcl) {
+         sstep_chebyshev_kernel_vector (alpha, W_lcl, D_inv_lcl,
+                                        B_lcl, A_lcl, X_lcl, beta, rank, A_lcl.numRows());
+       },
+       readWrite (W),
+       readOnly (D_inv),
+       readOnly (B),
+       readOnly (X)); 
+       //writeOnly (X));
+
+    // matrix, halo part
+    if (RANKPRINT)
+    printf("(beta!=0) [%d] overlapped matvec\n", rank);
+    fflush(stdout);
+    if (hind>0)
+    withLocalAccess
+      ([&] (const rw_lcl_vec_type& W_lcl,
+            const ro_lcl_vec_type& D_inv_lcl,
+            const ro_lcl_vec_type& B_lcl,
+            const wo_lcl_vec_type& X_lcl) {
+         auto W_ext = Kokkos::subview(W_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
+         auto B_ext = Kokkos::subview(B_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
+         auto Dinv_ext = Kokkos::subview(D_inv_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
+         int xlimit = ( (hind == hstarts.size()-1) ? X_lcl.extent(0) : numLocalRows+hstarts[hind+1] );
+         auto X_ext = Kokkos::subview(X_lcl,std::make_pair(0,xlimit));
+  if (RANKPRINT)
+  printf("(beta!=0) [%d] numLocalRows=%lu, hind=%d, yrange=%d, xlimit=%d, A_ext.numRows=%d\n", rank, numLocalRows, hind, yrange,xlimit,A_ext.numRows());
+  fflush(stdout);
+         sstep_chebyshev_kernel_vector (alpha, W_ext, Dinv_ext,
+                                        B_ext, A_ext, X_ext, beta, rank, yrange);
+                                        //B_ext, A_ext, X_ext, beta, rank, numLocalRows);
+       },
+       readWrite (W),
+       readOnly (D_inv),
+       readOnly (B),
        writeOnly (X));
   }
-  if (!do_X_update)
-    X.update(STS::one (), W, STS::one ());
 } //sStepChebyshevKernel::fusedCase
 
 } // namespace Details

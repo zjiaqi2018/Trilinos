@@ -386,6 +386,8 @@ private:
 
   //! Array of MultiVectors with overlapping.
   std::vector<Teuchos::RCP<MV>> ovX_;
+  Teuchos::RCP<MV> ovB_;
+  Teuchos::RCP<V> ovD_;
 
   //! "Operator" implementing W := alpha*D_inv*(B-A*X) + beta*W and X := X+W.
   Teuchos::RCP<ChebyshevKernel<op_type> > ck_;
@@ -559,7 +561,9 @@ private:
   /// This is an optimization for apply().  This method caches the
   /// created MultiVector as W_.  Caching optimizes the common case of
   /// calling apply() many times.
-  Teuchos::RCP<MV> makeTempMultiVector (const MV& B);
+  //Teuchos::RCP<MV> makeTempMultiVector (const MV& B);
+
+  void makeTempMultiVector(Teuchos::RCP<const map_type>, const size_t&, Teuchos::RCP<MV>&);
 
   //! W = alpha*D_inv*B and X = 0 + W.
   void
