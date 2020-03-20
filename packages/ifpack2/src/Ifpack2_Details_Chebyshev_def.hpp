@@ -1485,8 +1485,8 @@ sStepApplyImpl (const MV& B, MV& X)
   int rank = overlappingA_->getComm()->getRank();
 
   // Special case for the first iteration.
-  //if (! zeroStartingSolution_) { FIXME
-  if (true) { //FIXME
+  if (! zeroStartingSolution_) {
+  //if (true) { // for debugging only
     // mfh 22 May 2019: Tests don't actually exercise this path.
 
     if (sck_.is_null ()) {
