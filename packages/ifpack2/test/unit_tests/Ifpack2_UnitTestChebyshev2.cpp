@@ -846,11 +846,6 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   // Run Ifpack2's default version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
   A->apply (x_exact, b); // Reset the RHS.
-  x.norm2(norms());
-  std::cout << "||x_init||=" << norms[0] << std::endl;
-  b.norm2(norms());
-  std::cout << "||b||=" << norms[0] << std::endl;
-  //std::cout << "before (default Cheby)\n" << params2 << std::endl;
   ifpack2Cheby.setParameters (params2);
   //std::cout << "after (default Cheby)\n" << params2 << std::endl;
   //PrintVector(b,"b-before");
@@ -869,10 +864,6 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run Ifpack2's s-step version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
-  x.norm2(norms());
-  std::cout << "||x_init||=" << norms[0] << std::endl;
-  b.norm2(norms());
-  std::cout << "||b||=" << norms[0] << std::endl;
   params3.set ("chebyshev: eigenvalue max iterations", numEigIters);
   params3.set ("chebyshev: degree", numIters);
   params3.set ("chebyshev: max eigenvalue", lambdaMax);
