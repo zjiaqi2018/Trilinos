@@ -123,7 +123,6 @@ struct sStepChebyshevKernelVectorFunctor {
     rank(rank),
     numLocalRows(numLocalRows)
   {
-    printf("entering sStepChebyshevKernelVectorFunctor\n"); fflush(stdout);
     const size_t numRows = m_A.numRows ();
     const size_t numCols = m_A.numCols ();
 
@@ -131,8 +130,7 @@ struct sStepChebyshevKernelVectorFunctor {
     const size_t m_b_extent = size_t(m_b.extent(0));
     const size_t m_w_extent = size_t(m_w.extent(0));
     const size_t m_x_extent = size_t(m_x.extent(0));
-    //if (RANKPRINT) {
-    if (1) {
+    if (RANKPRINT) {
       std::cout << "(" << rank << ") m_d=" << m_d_extent << ",m_b="
                 << m_b_extent << ",m_w="
                 << m_w_extent << ",m_x="
@@ -291,8 +289,6 @@ sstep_chebyshev_kernel_vector
 {
   using execution_space = typename AMatrix::execution_space;
 
-  printf("entering sstep_chebyshev_kernel_vector\n"); fflush(stdout);
-
   if (A.numRows () == 0) {
     return;
   }
@@ -421,9 +417,6 @@ apply (multivector_type& W,
 {
   using Teuchos::RCP;
   using Teuchos::rcp;
-
-  printf("HEREEEEEEEEEEEEEEEEEEEEEEEE\n");
-  fflush(stdout);
 
   if (canFuse (B)) {
     // "nonconst" here has no effect other than on the return type.
@@ -556,7 +549,6 @@ fusedCase (vector_type& W,
       printf("(beta=0) [%d] local matvec\n", rank);
       fflush(stdout);
     }
-    printf("beta=0******\n"); fflush(stdout);
     // matrix, local part
     withLocalAccess
       ([&] (const wo_lcl_vec_type& W_lcl,

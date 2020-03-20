@@ -76,6 +76,7 @@ Ifpack2::Chebyshev to an incorrect upper bound on the eigenvalues.
 This gives me confidence that Ifpack2's version is correct.
 */
 
+#include <unistd.h>
 #include <Ifpack2_ConfigDefs.hpp>
 #include <Ifpack2_Chebyshev.hpp>
 #include <Ifpack2_UnitTestHelpers.hpp>
@@ -296,6 +297,32 @@ private:
   }
 };
 
+void FlushAndSleep(Teuchos::RCP<const Teuchos::Comm<int> > &comm)
+{
+  fflush(stdout);
+  sleep(1);
+  comm->barrier();
+}
+
+template <class MV>
+void PrintVector(MV x, std::string vectorName)
+{
+  using ST=typename MV::scalar_type;
+  Teuchos::RCP<const Teuchos::Comm<int> > comm = x.getMap()->getComm();
+  Teuchos::ArrayRCP<const ST> xvals = x.getData(0);
+  auto myrank = comm->getRank();
+  if (myrank==0)
+    std::cout << "=========\nvector " << vectorName << "\n=========" << std::endl;
+  for (int p=0; p<comm->getSize(); ++p) {
+    if (myrank == p) {
+      for (int i=0; i< xvals.size(); ++i)
+        std::cout << "[" << myrank << "]   " << vectorName << "[" << i << "]=" << xvals[i] << std::endl;
+    }
+    FlushAndSleep(comm);
+  }
+  xvals=Teuchos::null;
+}
+
 //////////////////////////////////////////////////////////////////////
 // Command-line arguments
 //////////////////////////////////////////////////////////////////////
@@ -303,6 +330,7 @@ private:
 // They have long names so I don't confuse them with the shorter-named
 // actual options in the body of the test.
 int numberOfIterations = 3;
+//int numberOfIterations = 1;
 int numberOfEigenanalysisIterations = 15;
 //int localNumberOfRows = 10000;
 int localNumberOfRows = 5;
@@ -413,7 +441,7 @@ TEUCHOS_UNIT_TEST(Ifpack2Chebyshev, Convergence)
   A->fillComplete (domainMap, rangeMap);
 RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::cout));
 
-  A->describe(*fos,Teuchos::VERB_EXTREME);
+  //A->describe(*fos,Teuchos::VERB_EXTREME);
 
   //overlap must be equal to the number of matvecs we test
   //See https://github.com/trilinos/Trilinos/issues/7017.
@@ -470,7 +498,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
       << "Initial residual norm: " << maxInitResNorm << endl
       << endl;
 
-  Teuchos::ParameterList params, params2;
+  Teuchos::ParameterList params;
   // Set parameters for the various Chebyshev implementations.  The
   // above Chebyshev class understands many of the same parameters as
   // Ifpack2, Ifpack, and ML.  For this first pass, we only set the
@@ -482,13 +510,14 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Create the operators: Ifpack2, textbook Chebyshev, and custom CG.
   prec_type ifpack2Cheby (A), ifpack2Cheby_2(B);
+  //prec_type ifpack2Cheby (A), ifpack2Cheby_2(A);
   Ifpack2::Details::Chebyshev<ST, MV> myCheby (A);
   CG<ST, MV, crs_matrix_type> cg (A);
 
   // Residual 2-norms for comparison.
   MT maxResNormIfpack2, maxResNormTextbook, maxResNormCg, maxsStepNorm;
 
-#ifdef RUN_TESTS_1_THROUGH_6
+#if 1 //RUN_TESTS_1_THROUGH_6
   ////////////////////////////////////////////////////////////////////
   // Test 1: set lambdaMax exactly, use default values of eigRatio and
   // lambdaMin.  Run each version of Chebyshev and compare results.
@@ -506,6 +535,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run our custom version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   params.set ("chebyshev: textbook algorithm", true);
   myCheby.setParameters (params);
   myCheby.compute ();
@@ -517,6 +547,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run CG, just to compare.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
@@ -548,6 +579,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run our custom version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   params.set ("chebyshev: textbook algorithm", true);
   myCheby.setParameters (params);
   myCheby.compute ();
@@ -559,6 +591,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run CG, just to compare.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
@@ -600,6 +633,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run our custom version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   params.set ("chebyshev: textbook algorithm", true);
   myCheby.setParameters (params);
   myCheby.compute ();
@@ -611,6 +645,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run CG, just to compare.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
@@ -645,6 +680,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run our custom version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   params.set ("chebyshev: textbook algorithm", true);
   myCheby.setParameters (params);
   myCheby.compute ();
@@ -656,6 +692,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run CG, just to compare.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
@@ -691,6 +728,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run our custom version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   params.set ("chebyshev: textbook algorithm", true);
   myCheby.setParameters (params);
   myCheby.compute ();
@@ -702,6 +740,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run CG, just to compare.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
@@ -712,8 +751,8 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
       << "- CG:                         " << maxResNormCg / maxInitResNorm << endl;
 
   // Print the computed max and min eigenvalues, and other details.
-  os2 << endl;
-  myCheby.print (os2);
+  //os2 << endl;
+  //myCheby.print (os2);
 
   // Reset parameters.
   params.set ("chebyshev: textbook algorithm", false);
@@ -742,6 +781,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run our custom version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   params.set ("chebyshev: textbook algorithm", true);
   myCheby.setParameters (params);
   myCheby.compute ();
@@ -753,6 +793,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   // Run CG, just to compare.
   x.putScalar (zero); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
 
@@ -784,8 +825,8 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   }
 
   // Print the computed max and min eigenvalues, and other details.
-  os2 << endl;
-  myCheby.print (os2);
+  //os2 << endl;
+  //myCheby.print (os2);
 
 #endif //ifdef RUN_TESTS_1_THROUGH_6
 
@@ -794,19 +835,26 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   // of Chebyshev that communicates after each matrix-vector product.
   ////////////////////////////////////////////////////////////////////
 
-/*
-  // Reset parameters.
-  params.set ("chebyshev: textbook algorithm", false);
-  params.set ("chebyshev: s-step algorithm", true);
-  params.set ("chebyshev: min eigenvalue", lambdaMin);
-  params.set ("chebyshev: ratio eigenvalue", eigRatio);
-*/
+  Teuchos::ParameterList params2, params3;
+
+  params2.set ("chebyshev: eigenvalue max iterations", numEigIters);
+  params2.set ("chebyshev: degree", numIters);
+  params2.set ("chebyshev: max eigenvalue", lambdaMax);
+  //params2.set ("chebyshev: s-step algorithm", true);
+  params2.set ("chebyshev: s-step algorithm", false);
 
   // Run Ifpack2's default version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
-  std::cout << "before (default Cheby)\n" << params << std::endl;
-  ifpack2Cheby.setParameters (params);
-  std::cout << "after (default Cheby)\n" << params << std::endl;
+  A->apply (x_exact, b); // Reset the RHS.
+  x.norm2(norms());
+  std::cout << "||x_init||=" << norms[0] << std::endl;
+  b.norm2(norms());
+  std::cout << "||b||=" << norms[0] << std::endl;
+  //std::cout << "before (default Cheby)\n" << params2 << std::endl;
+  ifpack2Cheby.setParameters (params2);
+  //std::cout << "after (default Cheby)\n" << params2 << std::endl;
+  //PrintVector(b,"b-before");
+  //FlushAndSleep(comm);
   ifpack2Cheby.initialize ();
   ifpack2Cheby.compute ();
   ifpack2Cheby.apply (b, x);
@@ -814,17 +862,29 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   A->apply (x, r, Teuchos::NO_TRANS, -one, one);
   r.norm2 (norms ());
   maxResNormIfpack2 = *std::max_element (norms.begin (), norms.end ());
+  //x.describe(*fos,Teuchos::VERB_EXTREME);
+  //PrintVector(b,"b-after");
+  //PrintVector(x,"x");
 
 
   // Run Ifpack2's s-step version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
-  params2.set ("chebyshev: eigenvalue max iterations", numEigIters);
-  params2.set ("chebyshev: degree", numIters);
-  params2.set ("chebyshev: max eigenvalue", lambdaMax);
-  params2.set ("chebyshev: s-step algorithm", true);
-  std::cout << "before (s-step Cheby)\n" << params2 << std::endl;
-  ifpack2Cheby_2.setParameters (params2);
-  std::cout << "after (s-step Cheby)\n" << params2 << std::endl;
+  x.norm2(norms());
+  std::cout << "||x_init||=" << norms[0] << std::endl;
+  b.norm2(norms());
+  std::cout << "||b||=" << norms[0] << std::endl;
+  params3.set ("chebyshev: eigenvalue max iterations", numEigIters);
+  params3.set ("chebyshev: degree", numIters);
+  params3.set ("chebyshev: max eigenvalue", lambdaMax);
+  params3.set ("chebyshev: s-step algorithm", true);
+  //params3.set ("chebyshev: s-step algorithm", false);
+  //std::cout << "before (s-step Cheby)\n" << params3 << std::endl;
+  ifpack2Cheby_2.setParameters (params3);
+  //std::cout << "after (s-step Cheby)\n" << params3 << std::endl;
+  //reset RHS ... the above process is changing it...
+  A->apply (x_exact, b);
+  //PrintVector(b,"b-before");
+  //FlushAndSleep(comm);
   ifpack2Cheby_2.initialize ();
   ifpack2Cheby_2.compute ();
   ifpack2Cheby_2.apply (b, x);
@@ -832,6 +892,9 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   A->apply (x, r, Teuchos::NO_TRANS, -one, one);
   r.norm2 (norms ());
   maxsStepNorm = *std::max_element (norms.begin (), norms.end ());
+  //x.describe(*fos,Teuchos::VERB_EXTREME);
+  //PrintVector(b,"b-after");
+  //PrintVector(x,"x");
 
 /*
   // Run Ifpack2's s-step version of Chebyshev.
