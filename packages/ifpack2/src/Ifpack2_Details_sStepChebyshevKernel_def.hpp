@@ -421,6 +421,9 @@ apply (multivector_type& W,
   using Teuchos::RCP;
   using Teuchos::rcp;
 
+  printf("HEREEEEEEEEEEEEEEEEEEEEEEEE\n");
+  fflush(stdout);
+
   if (canFuse (B)) {
     // "nonconst" here has no effect other than on the return type.
     if (W_vec_.is_null() || W.getLocalViewHost().data() != viewW_.data()) {
