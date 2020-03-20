@@ -156,11 +156,11 @@ struct sStepChebyshevKernelVectorFunctor {
          if (lclRow >= numLocalRows) {
            return;
          }
-         if (RANKPRINT) {
-           printf("  [%d] lclRow=%d, dev.league_rank=%d, rows_per_team=%d, loop=%d\n",rank,lclRow,
-                  dev.league_rank (), rows_per_team, loop);
-           fflush(stdout);
-         }
+         // if (RANKPRINT) {
+         //   printf("  [%d] lclRow=%d, dev.league_rank=%d, rows_per_team=%d, loop=%d\n",rank,lclRow,
+         //          dev.league_rank (), rows_per_team, loop);
+         //   fflush(stdout);
+         // }
          const auto A_row = m_A.rowConst(lclRow);
          const LO row_length = static_cast<LO> (A_row.length);
          residual_value_type A_x = KAT::zero ();
@@ -168,20 +168,20 @@ struct sStepChebyshevKernelVectorFunctor {
          Kokkos::parallel_reduce (Kokkos::ThreadVectorRange (dev, row_length), [&] (const LO iEntry, residual_value_type& lsum) {
               const auto A_val = A_row.value(iEntry);
               //printf("iEntry=%d\n",iEntry);
-              if (RANKPRINT) {
-                printf("  [%d] A_row.colidx(%d)=%d\n",rank, iEntry,A_row.colidx(iEntry));
-                fflush(stdout);
-              }
+              // if (RANKPRINT) {
+              //   printf("  [%d] A_row.colidx(%d)=%d\n",rank, iEntry,A_row.colidx(iEntry));
+              //   fflush(stdout);
+              // }
               lsum += A_val * m_x(A_row.colidx(iEntry));
             }, A_x);
 
          Kokkos::single
            (Kokkos::PerThread(dev),
             [&] () {
-              if (RANKPRINT) {
-                printf("  [%d] lclRow=%d, m_d.extend(0)=%lu, m_b.extent(0)=%lu, A.numRows=%d, m_w.extent()=%lu, m_x.extent()=%lu\n",rank,lclRow,m_d.extent(0),m_b.extent(0),m_A.numRows(),m_w.extent(0),m_x.extent(0));
-                fflush(stdout);
-              }
+              // if (RANKPRINT) {
+              //   printf("  [%d] lclRow=%d, m_d.extend(0)=%lu, m_b.extent(0)=%lu, A.numRows=%d, m_w.extent()=%lu, m_x.extent()=%lu\n",rank,lclRow,m_d.extent(0),m_b.extent(0),m_A.numRows(),m_w.extent(0),m_x.extent(0));
+              //   fflush(stdout);
+              // }
               //printf("[%d] DO NOTHING lclRow=%d, m_d.extend(0)=%d, m_b.extent(0)=%d\n",rank,lclRow,m_d.extent(0),m_b.extent(0));
               const auto alpha_D_res =
                 alpha * m_d(lclRow) * (m_b(lclRow) - A_x);
@@ -504,10 +504,10 @@ fusedCase (vector_type& W,
   auto A_ext = extA.getLocalMatrix ();
   if (beta == STS::zero ()) {
 
-    if (RANKPRINT) {
-      printf("(beta=0) [%d] local matvec\n", rank);
-      fflush(stdout);
-    }
+    // if (RANKPRINT) {
+    //   printf("(beta=0) [%d] local matvec\n", rank);
+    //   fflush(stdout);
+    // }
     // matrix, local part
     withLocalAccess
       ([&] (const wo_lcl_vec_type& W_lcl,
@@ -529,23 +529,23 @@ fusedCase (vector_type& W,
             const ro_lcl_vec_type& D_inv_lcl,
             const ro_lcl_vec_type& B_lcl,
             const wo_lcl_vec_type& X_lcl) {
-         if (RANKPRINT) {
-           printf("Halo Starts:");
-           for(size_t i=0; i< (size_t)hstarts.size(); i++)
-             printf("%d ",(int) hstarts[i]);
-           printf("\n");
-           fflush(stdout);
-         }
+         // if (RANKPRINT) {
+         //   printf("Halo Starts:");
+         //   for(size_t i=0; i< (size_t)hstarts.size(); i++)
+         //     printf("%d ",(int) hstarts[i]);
+         //   printf("\n");
+         //   fflush(stdout);
+         // }
          auto W_ext = Kokkos::subview(W_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
          auto B_ext = Kokkos::subview(B_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
          auto Dinv_ext = Kokkos::subview(D_inv_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
          int xlimit = ( (hind == hstarts.size()-1) ? X_lcl.extent(0) : numLocalRows+hstarts[hind+1] );
          auto X_ext = Kokkos::subview(X_lcl,std::make_pair(0,xlimit));
-         if (RANKPRINT) {
-           printf("(beta=0) [%d] overlapped matvec\n", rank);
-           printf("(beta=0) [%d] numLocalRows=%lu, hind=%d, yrange=%d, xlimit=%d, A_ext.numRows=%d, hstarts[hind+1]=%lu\n", rank, numLocalRows, hind, yrange,xlimit,A_ext.numRows(),hstarts[hind+1]);
-           fflush(stdout);
-         }
+         // if (RANKPRINT) {
+         //   printf("(beta=0) [%d] overlapped matvec\n", rank);
+         //   printf("(beta=0) [%d] numLocalRows=%lu, hind=%d, yrange=%d, xlimit=%d, A_ext.numRows=%d, hstarts[hind+1]=%lu\n", rank, numLocalRows, hind, yrange,xlimit,A_ext.numRows(),hstarts[hind+1]);
+         //   fflush(stdout);
+         // }
          sstep_chebyshev_kernel_vector (alpha, W_ext, Dinv_ext,
                                         B_ext, A_ext, X_ext, beta, rank, yrange);
                                         //B_ext, A_ext, X_ext, beta, rank, numLocalRows);
@@ -559,10 +559,10 @@ fusedCase (vector_type& W,
   else { // need to read _and_ write W if beta != 0
 
     // matrix, local part
-    if (RANKPRINT) {
-      printf("(beta!=0) [%d] local matvec\n", rank);
-      fflush(stdout);
-    }
+    // if (RANKPRINT) {
+    //   printf("(beta!=0) [%d] local matvec\n", rank);
+    //   fflush(stdout);
+    // }
     withLocalAccess
       ([&] (const rw_lcl_vec_type& W_lcl,
             const ro_lcl_vec_type& D_inv_lcl,
@@ -578,10 +578,10 @@ fusedCase (vector_type& W,
        //writeOnly (X));
 
     // matrix, halo part
-    if (RANKPRINT) {
-      printf("(beta!=0) [%d] overlapped matvec\n", rank);
-      fflush(stdout);
-    }
+    // if (RANKPRINT) {
+    //   printf("(beta!=0) [%d] overlapped matvec\n", rank);
+    //   fflush(stdout);
+    // }
     if (hind>0)
     withLocalAccess
       ([&] (const rw_lcl_vec_type& W_lcl,
@@ -593,10 +593,10 @@ fusedCase (vector_type& W,
          auto Dinv_ext = Kokkos::subview(D_inv_lcl,std::make_pair(numLocalRows,numLocalRows+yrange));
          int xlimit = ( (hind == hstarts.size()-1) ? X_lcl.extent(0) : numLocalRows+hstarts[hind+1] );
          auto X_ext = Kokkos::subview(X_lcl,std::make_pair(0,xlimit));
-         if (RANKPRINT) {
-           printf("(beta!=0) [%d] numLocalRows=%lu, hind=%d, yrange=%d, xlimit=%d, A_ext.numRows=%d\n", rank, numLocalRows, hind, yrange,xlimit,A_ext.numRows());
-           fflush(stdout);
-         }
+         // if (RANKPRINT) {
+         //   printf("(beta!=0) [%d] numLocalRows=%lu, hind=%d, yrange=%d, xlimit=%d, A_ext.numRows=%d\n", rank, numLocalRows, hind, yrange,xlimit,A_ext.numRows());
+         //   fflush(stdout);
+         // }
          sstep_chebyshev_kernel_vector (alpha, W_ext, Dinv_ext,
                                         B_ext, A_ext, X_ext, beta, rank, yrange);
                                         //B_ext, A_ext, X_ext, beta, rank, numLocalRows);

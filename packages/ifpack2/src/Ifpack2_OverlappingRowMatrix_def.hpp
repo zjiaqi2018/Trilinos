@@ -188,15 +188,15 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
   sleep(1);
   A_->getComm()->barrier();
   RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::cout));
-  fos->setOutputToRootOnly(0);
-  *fos << "============= ExtMatrix_ ============" << std::endl;
-  sleep(1);
-  A_->getComm()->barrier();
-  fos->setOutputToRootOnly(-1);
-  ExtMatrix_->describe(*fos,Teuchos::VERB_EXTREME);
-  fos->setOutputToRootOnly(0);
-  *fos << "============= end of ExtMatrix_ ============" << std::endl;
-  sleep(1);
+  // fos->setOutputToRootOnly(0);
+  // *fos << "============= ExtMatrix_ ============" << std::endl;
+  // sleep(1);
+  // A_->getComm()->barrier();
+  // fos->setOutputToRootOnly(-1);
+  // ExtMatrix_->describe(*fos,Teuchos::VERB_EXTREME);
+  // fos->setOutputToRootOnly(0);
+  // *fos << "============= end of ExtMatrix_ ============" << std::endl;
+  // sleep(1);
   A_->getComm()->barrier();
 */
   // fix indices for overlapping matrix
