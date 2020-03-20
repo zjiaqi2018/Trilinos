@@ -828,20 +828,25 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   //myCheby.print (os2);
 
   ////////////////////////////////////////////////////////////////////
-  // Test 7: Test s-step Chebyshev by comparing it to the implementation
+  // Test 7: Test s-step Chebyshev with *zero* initial guess
+  // by comparing it to the implementation
   // of Chebyshev that communicates after each matrix-vector product.
   ////////////////////////////////////////////////////////////////////
 
-  Teuchos::ParameterList params2, params3;
+  { //scoping
+  prec_type ifpack2Cheby (A), ifpack2Cheby_2(B);
+  Teuchos::RCP<Teuchos::ParameterList> params2, params3;
+  params2 = Teuchos::rcp(new Teuchos::ParameterList());
 
-  params2.set ("chebyshev: eigenvalue max iterations", numEigIters);
-  params2.set ("chebyshev: degree", numIters);
-  params2.set ("chebyshev: max eigenvalue", lambdaMax);
+  params2->set ("chebyshev: eigenvalue max iterations", numEigIters);
+  params2->set ("chebyshev: degree", numIters);
+  params2->set ("chebyshev: max eigenvalue", lambdaMax);
+  params2->set ("chebyshev: zero starting solution", true);
 
   // Run Ifpack2's default version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
   A->apply (x_exact, b); // Reset the RHS.
-  ifpack2Cheby.setParameters (params2);
+  ifpack2Cheby.setParameters (*params2);
   ifpack2Cheby.initialize ();
   ifpack2Cheby.compute ();
   ifpack2Cheby.apply (b, x);
@@ -851,17 +856,15 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   maxResNormIfpack2 = *std::max_element (norms.begin (), norms.end ());
 
   // Run Ifpack2's s-step version of Chebyshev.
+  params3 = Teuchos::rcp(new Teuchos::ParameterList());
+  params3->set ("chebyshev: eigenvalue max iterations", numEigIters);
+  params3->set ("chebyshev: degree", numIters);
+  params3->set ("chebyshev: max eigenvalue", lambdaMax);
+  params3->set ("chebyshev: s-step algorithm", true);
+  params3->set ("chebyshev: zero starting solution", true);
+  ifpack2Cheby_2.setParameters (*params3);
   x.putScalar (zero); // Reset the initial guess(es).
-  params3.set ("chebyshev: eigenvalue max iterations", numEigIters);
-  params3.set ("chebyshev: degree", numIters);
-  params3.set ("chebyshev: max eigenvalue", lambdaMax);
-  params3.set ("chebyshev: s-step algorithm", true);
-  //params3.set ("chebyshev: s-step algorithm", false);
-  //std::cout << "before (s-step Cheby)\n" << params3 << std::endl;
-  ifpack2Cheby_2.setParameters (params3);
-  //std::cout << "after (s-step Cheby)\n" << params3 << std::endl;
-  //reset RHS ... the above process is changing it...
-  A->apply (x_exact, b);
+  A->apply (x_exact, b); // Reset the RHS.
   ifpack2Cheby_2.initialize ();
   ifpack2Cheby_2.compute ();
   ifpack2Cheby_2.apply (b, x);
@@ -880,5 +883,66 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
       << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
       << "- s-step Chebyshev:           " << maxsStepNorm / maxInitResNorm << endl
       << "- CG:                         " << maxResNormCg / maxInitResNorm << endl;
+  } //scoping
+
+  ////////////////////////////////////////////////////////////////////
+  // Test 8: Test s-step Chebyshev with *nonzero* initial guess
+  // by comparing it to the implementation
+  // of Chebyshev that communicates after each matrix-vector product.
+  ////////////////////////////////////////////////////////////////////
+
+  { //scoping
+  prec_type ifpack2Cheby (A), ifpack2Cheby_2(B);
+  Teuchos::RCP<Teuchos::ParameterList> params2, params3;
+  params2 = Teuchos::rcp(new Teuchos::ParameterList());
+
+  params2->set ("chebyshev: eigenvalue max iterations", numEigIters);
+  params2->set ("chebyshev: degree", numIters);
+  params2->set ("chebyshev: max eigenvalue", lambdaMax);
+  params2->set ("chebyshev: zero starting solution", false);
+
+  // Run Ifpack2's default version of Chebyshev.
+  Teuchos::ScalarTraits<double>::seedrandom(666);
+  x.randomize (); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
+  ifpack2Cheby.setParameters (*params2);
+  ifpack2Cheby.initialize ();
+  ifpack2Cheby.compute ();
+  ifpack2Cheby.apply (b, x);
+  r = b;
+  A->apply (x, r, Teuchos::NO_TRANS, -one, one);
+  r.norm2 (norms ());
+  maxResNormIfpack2 = *std::max_element (norms.begin (), norms.end ());
+
+  // Run Ifpack2's s-step version of Chebyshev.
+  params3 = Teuchos::rcp(new Teuchos::ParameterList());
+  params3->set ("chebyshev: eigenvalue max iterations", numEigIters);
+  params3->set ("chebyshev: degree", numIters);
+  params3->set ("chebyshev: max eigenvalue", lambdaMax);
+  params3->set ("chebyshev: s-step algorithm", true);
+  params3->set ("chebyshev: zero starting solution", true);
+  ifpack2Cheby_2.setParameters (*params3);
+  A->apply (x_exact, b); // Reset the RHS.
+  Teuchos::ScalarTraits<double>::seedrandom(666);
+  x.randomize(); // Reset the initial guess(es).
+  ifpack2Cheby_2.initialize ();
+  ifpack2Cheby_2.compute ();
+  ifpack2Cheby_2.apply (b, x);
+  r = b;
+  A->apply (x, r, Teuchos::NO_TRANS, -one, one);
+  r.norm2 (norms ());
+  maxsStepNorm = *std::max_element (norms.begin (), norms.end ());
+
+  // Run CG, just to compare.
+  x.putScalar (zero); // Reset the initial guess(es).
+  cg.setParameters (params);
+  maxResNormCg = cg.apply (b, x);
+
+  os2 << "Test8: Results with lambdaMax = " << lambdaMax
+      << ", lambdaMin = " << lambdaMin << ", eigRatio = " << eigRatio << endl
+      << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
+      << "- s-step Chebyshev:           " << maxsStepNorm / maxInitResNorm << endl
+      << "- CG:                         " << maxResNormCg / maxInitResNorm << endl;
+  } //scoping
 
 }
