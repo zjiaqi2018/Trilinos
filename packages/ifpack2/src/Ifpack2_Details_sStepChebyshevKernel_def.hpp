@@ -47,10 +47,6 @@
 #include "Tpetra_Operator.hpp"
 #include "Tpetra_Vector.hpp"
 #include "Tpetra_withLocalAccess_MultiVector.hpp"
-#ifdef OLD_APPROACH_COMMUNICATION_NEEDED
-#include "Tpetra_Export_decl.hpp"
-#include "Tpetra_Import_decl.hpp"
-#endif //OLD_APPROACH_COMMUNICATION_NEEDED
 #include "Kokkos_ArithTraits.hpp"
 #include "Teuchos_Assert.hpp"
 #include <type_traits>

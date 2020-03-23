@@ -782,7 +782,7 @@ setMatrix (const Teuchos::RCP<const row_matrix_type>& A)
 
 template<class ScalarType, class MV>
 void
-Chebyshev<ScalarType, MV>::compute ()
+Chebyshev<ScalarType, MV>::compute()
 {
   using std::endl;
   using Teuchos::RCP;
@@ -809,33 +809,6 @@ Chebyshev<ScalarType, MV>::compute ()
     TODO FIXME
     check that overlap is sufficient
   */
-
-  // s-step requires an Ifpack2 overlapping row matrix, in order to access halo information.
-  if (sStepAlgorithm_) {
-    RCP<const Ifpack2::Details::RowMatrix<row_matrix_type>> if2A = rcp_dynamic_cast<const Ifpack2::Details::RowMatrix<row_matrix_type>>(A_);
-    TEUCHOS_TEST_FOR_EXCEPTION(if2A.is_null(), std::runtime_error, "Ifpack2::Chebyshev::compute: Input matrix cannot be cast to an Ifpack2::Details::RowMatrix, which is required for s-step Chebyshev.");
-    overlappingA_ = rcp_dynamic_cast<const overlapping_row_matrix_type>(if2A);
-    TEUCHOS_TEST_FOR_EXCEPTION(overlappingA_.is_null(), std::runtime_error, "Ifpack2::Chebyshev::compute: Input matrix cannot be cast to an Ifpack2::OverappingRowMatrix, which is required for s-step Chebyshev.");
-
-    undA_ = rcp_dynamic_cast<const crs_matrix_type>(overlappingA_->getUnderlyingMatrix());
-    extA_ = rcp_dynamic_cast<const crs_matrix_type>(overlappingA_->getExtMatrix());
-
-    // FIXME This is doing a deep copy ...
-    undA_lcl_ = undA_->getLocalMatrix();
-    extA_lcl_ = extA_->getLocalMatrix();
-
-    /*
-      TODO : create and populate overlapped solution vector
-         need ovX declared
-         need to know how many RHS vectors there are
-    */
-    hstarts_ = overlappingA_->getExtHaloStarts();
-    RCP<const map_type> ovRowmap = overlappingA_->getRowMap();
-    //create two overlapping solution "work" vectors
-    ovX_.push_back(rcp(new MV(ovRowmap, numberOfMultiVectors_))); 
-    ovX_.push_back(rcp(new MV(ovRowmap, numberOfMultiVectors_))); 
-  }
-
 
   // If A_ is a CrsMatrix and its graph is constant, we presume that
   // the user plans to reuse the structure of A_, but possibly change
@@ -893,6 +866,36 @@ Chebyshev<ScalarType, MV>::compute ()
   }
   else { // the user provided an inverse diagonal
     D_ = makeRangeMapVectorConst (userInvDiag_);
+  }
+
+  // s-step requires an Ifpack2 overlapping row matrix, in order to access halo information.
+  if (sStepAlgorithm_) {
+    RCP<const Ifpack2::Details::RowMatrix<row_matrix_type>> if2A = rcp_dynamic_cast<const Ifpack2::Details::RowMatrix<row_matrix_type>>(A_);
+    TEUCHOS_TEST_FOR_EXCEPTION(if2A.is_null(), std::runtime_error, "Ifpack2::Chebyshev::compute: Input matrix cannot be cast to an Ifpack2::Details::RowMatrix, which is required for s-step Chebyshev.");
+    overlappingA_ = rcp_dynamic_cast<const overlapping_row_matrix_type>(if2A);
+    TEUCHOS_TEST_FOR_EXCEPTION(overlappingA_.is_null(), std::runtime_error, "Ifpack2::Chebyshev::compute: Input matrix cannot be cast to an Ifpack2::OverappingRowMatrix, which is required for s-step Chebyshev.");
+
+    undA_ = rcp_dynamic_cast<const crs_matrix_type>(overlappingA_->getUnderlyingMatrix());
+    extA_ = rcp_dynamic_cast<const crs_matrix_type>(overlappingA_->getExtMatrix());
+
+    // FIXME This is doing a deep copy ...
+    undA_lcl_ = undA_->getLocalMatrix();
+    extA_lcl_ = extA_->getLocalMatrix();
+
+    /*
+      TODO : create and populate overlapped solution vector
+         need ovX declared
+         need to know how many RHS vectors there are
+    */
+    hstarts_ = overlappingA_->getExtHaloStarts();
+    RCP<const map_type> ovRowmap = overlappingA_->getRowMap();
+    //create two overlapping solution "work" vectors
+    ovX_.push_back(rcp(new MV(ovRowmap, numberOfMultiVectors_))); 
+    ovX_.push_back(rcp(new MV(ovRowmap, numberOfMultiVectors_))); 
+
+    if (ovD_.is_null ())
+      ovD_ = Teuchos::rcp(new V(overlappingA_->getRowMap (), true));
+    overlappingA_->importMultiVector(*D_,*ovD_);
   }
 
   // Have we estimated eigenvalues before?
@@ -984,7 +987,7 @@ Chebyshev<ScalarType, MV>::compute ()
                 << "        eigRatioForApply_  = " << eigRatioForApply_ << std::endl;
     }
   }
-}
+} //compute
 
 
 template<class ScalarType, class MV>
@@ -1219,6 +1222,7 @@ makeRangeMapVectorConst (const Teuchos::RCP<const V>& D) const
     return D;
   }
   else { // We need to Export.
+    std::cout << "makeRangeMapVectorConst: export" << std::endl;
     RCP<const export_type> exporter;
     // Making an Export object from scratch is expensive enough that
     // it's worth the O(1) global reductions to call isSameAs(), to
@@ -1366,10 +1370,6 @@ ifpackApplyImpl (const op_type& A,
   // Fetch cached temporary (multi)vector.
   makeTempMultiVector(B.getMap(), B.getNumVectors(), W_);
   MV& W = *W_;
-/*
-  Teuchos::RCP<MV> W_ptr = makeTempMultiVector (B);
-  MV& W = *W_ptr;
-*/
 
   if (debug) {
     *out_ << " Iteration " << 1 << ":" << endl
@@ -1485,19 +1485,15 @@ sStepApplyImpl (const MV& B, MV& X)
   //Single up-front import
   makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), ovX_[0]);
   makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), ovX_[1]);
-  //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), ovX_[0]);
-  //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), ovX_[1]);
-  overlappingA_->importMultiVector(X,*(ovX_[0]));
+  //overlappingA_->importMultiVector(X,*(ovX_[0]));
 
   makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), ovB_);
-  //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), ovB_);
   overlappingA_->importMultiVector(B,*ovB_);
 
-  //makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), ovD_);
-  //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), ovD_);
-  if (ovD_.is_null ())
-    ovD_ = Teuchos::rcp(new V(overlappingA_->getRowMap (), true));
-  overlappingA_->importMultiVector(*D_,*ovD_);
+  //TODO do this in compute() [status: fixed]
+  //if (ovD_.is_null ())
+  //  ovD_ = Teuchos::rcp(new V(overlappingA_->getRowMap (), true));
+  //overlappingA_->importMultiVector(*D_,*ovD_);
 
   // Initialize coefficients
   const ST alpha = lambdaMaxForApply_ / eigRatioForApply_;
@@ -1515,7 +1511,6 @@ sStepApplyImpl (const MV& B, MV& X)
   }
 
   // Fetch cached temporary (multi)vector.
-  //Teuchos::RCP<MV> W_ptr = makeTempMultiVector (ovB_);
   makeTempMultiVector(overlappingA_->getRowMap(), B.getNumVectors(), W_);
   //MV& W = *W_ptr;
   //makeTempVector(overlappingA_->getRowMap(), B.getNumVectors(), W_);
@@ -1551,6 +1546,7 @@ sStepApplyImpl (const MV& B, MV& X)
     std::cout << "||ovX_||=" << norms[0] << std::endl;
     PrintVector(*ovX_[0],"ovX_");
     */
+    overlappingA_->importMultiVector(X,*(ovX_[0]));
     sck_->apply(W, one/theta, const_cast<V&> (*ovD_),
                 const_cast<MV&> (*ovB_), *ovX_[0], zero, hstarts_, numIters_-1, rank);
                 //const_cast<MV&> (*ovB_), *ovX_[0], zero, hstarts_[numIters_-1]); //TODO check this
@@ -1597,11 +1593,8 @@ sStepApplyImpl (const MV& B, MV& X)
 
     // W := dtemp2**D_*(B - A*X) + dtemp1*W.
     // X := X + W
-//    std::cout << "pid " << overlappingA_->getComm()->getRank() << ": deg=" << deg << "    " << "hstarts[" << numIters_-deg-1 << "]=" << hstarts_[numIters_-deg-1] << std::endl;
     sck_->apply(W, dtemp2, const_cast<V&> (*ovD_),
                    const_cast<MV&> (*ovB_), *(ovX_[0]), dtemp1, hstarts_, numIters_-deg-1, rank);
-                   //const_cast<MV&> (*ovB_), *(ovX_[0]), dtemp1, hstarts_[numIters_-deg-1]);
-                                                           // ^^^^^^^^^^^^^^^  TODO triple check this
     ovX_[0]->update (one, W, one); // X := X + W
 
     if (debug) {
