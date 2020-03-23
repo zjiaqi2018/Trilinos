@@ -297,6 +297,7 @@ private:
   }
 };
 
+/*
 void FlushAndSleep(Teuchos::RCP<const Teuchos::Comm<int> > &comm)
 {
   fflush(stdout);
@@ -322,6 +323,7 @@ void PrintVector(MV x, std::string vectorName)
   }
   xvals=Teuchos::null;
 }
+*/
 
 //////////////////////////////////////////////////////////////////////
 // Command-line arguments
@@ -843,6 +845,8 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   params2->set ("chebyshev: max eigenvalue", lambdaMax);
   params2->set ("chebyshev: zero starting solution", true);
 
+  //FlushAndSleep(comm);
+
   // Run Ifpack2's default version of Chebyshev.
   x.putScalar (zero); // Reset the initial guess(es).
   A->apply (x_exact, b); // Reset the RHS.
@@ -854,6 +858,8 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   A->apply (x, r, Teuchos::NO_TRANS, -one, one);
   r.norm2 (norms ());
   maxResNormIfpack2 = *std::max_element (norms.begin (), norms.end ());
+
+  //FlushAndSleep(comm);
 
   // Run Ifpack2's s-step version of Chebyshev.
   params3 = Teuchos::rcp(new Teuchos::ParameterList());
@@ -877,6 +883,8 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   x.putScalar (zero); // Reset the initial guess(es).
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
+
+  //FlushAndSleep(comm);
 
   os2 << "Test7: Results with lambdaMax = " << lambdaMax
       << ", lambdaMin = " << lambdaMin << ", eigRatio = " << eigRatio << endl
@@ -901,6 +909,8 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   params2->set ("chebyshev: max eigenvalue", lambdaMax);
   params2->set ("chebyshev: zero starting solution", false);
 
+  //FlushAndSleep(comm);
+
   // Run Ifpack2's default version of Chebyshev.
   Teuchos::ScalarTraits<double>::seedrandom(666);
   x.randomize (); // Reset the initial guess(es).
@@ -914,17 +924,19 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   r.norm2 (norms ());
   maxResNormIfpack2 = *std::max_element (norms.begin (), norms.end ());
 
+  //FlushAndSleep(comm);
+
   // Run Ifpack2's s-step version of Chebyshev.
   params3 = Teuchos::rcp(new Teuchos::ParameterList());
   params3->set ("chebyshev: eigenvalue max iterations", numEigIters);
   params3->set ("chebyshev: degree", numIters);
   params3->set ("chebyshev: max eigenvalue", lambdaMax);
   params3->set ("chebyshev: s-step algorithm", true);
-  params3->set ("chebyshev: zero starting solution", true);
+  params3->set ("chebyshev: zero starting solution", false);
   ifpack2Cheby_2.setParameters (*params3);
-  A->apply (x_exact, b); // Reset the RHS.
   Teuchos::ScalarTraits<double>::seedrandom(666);
   x.randomize(); // Reset the initial guess(es).
+  A->apply (x_exact, b); // Reset the RHS.
   ifpack2Cheby_2.initialize ();
   ifpack2Cheby_2.compute ();
   ifpack2Cheby_2.apply (b, x);
@@ -937,6 +949,8 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
   x.putScalar (zero); // Reset the initial guess(es).
   cg.setParameters (params);
   maxResNormCg = cg.apply (b, x);
+
+  //FlushAndSleep(comm);
 
   os2 << "Test8: Results with lambdaMax = " << lambdaMax
       << ", lambdaMin = " << lambdaMin << ", eigRatio = " << eigRatio << endl

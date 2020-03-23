@@ -60,11 +60,40 @@
 #include "Tpetra_Details_residual.hpp"
 #include <cmath>
 #include <iostream>
+#include <unistd.h>
 
 namespace Ifpack2 {
 namespace Details {
 
 namespace { // (anonymous)
+
+/*
+void FlushAndSleep(Teuchos::RCP<const Teuchos::Comm<int> > &comm)
+{
+  fflush(stdout);
+  sleep(1);
+  comm->barrier();
+}
+
+template <class MV>
+void PrintVector(MV x, std::string vectorName)
+{
+  using ST=typename MV::scalar_type;
+  Teuchos::RCP<const Teuchos::Comm<int> > comm = x.getMap()->getComm();
+  Teuchos::ArrayRCP<const ST> xvals = x.getData(0);
+  auto myrank = comm->getRank();
+  if (myrank==0)
+    std::cout << "=========\nvector " << vectorName << "\n=========" << std::endl;
+  for (int p=0; p<comm->getSize(); ++p) {
+    if (myrank == p) {
+      for (int i=0; i< xvals.size(); ++i)
+        std::cout << "[" << myrank << "]   " << vectorName << "[" << i << "]=" << xvals[i] << std::endl;
+    }
+    FlushAndSleep(comm);
+  }
+  xvals=Teuchos::null;
+}
+*/
 
 // We use this text a lot in error messages.
 const char computeBeforeApplyReminder[] =
@@ -1357,6 +1386,20 @@ ifpackApplyImpl (const op_type& A,
     }
     // W := (1/theta)*D_inv*(B-A*X) and X := X + W.
     // X := X + W
+    /*
+    std::cout << "standard Cheby, *nonzero* initial guess" << std::endl;
+    std::cout << "one/theta=" << one/theta << std::endl;
+    Teuchos::Array<MT> norms(X.getNumVectors ());
+    D_inv.norm2(norms);
+    std::cout << "||D_inv||=" << norms[0] << std::endl;
+    PrintVector(D_inv,"D_inv");
+    B.norm2(norms);
+    std::cout << "||B||=" << norms[0] << std::endl;
+    PrintVector(B,"B");
+    X.norm2(norms);
+    std::cout << "||X||=" << norms[0] << std::endl;
+    PrintVector(X,"X");
+    */
     ck_->apply(W, one/theta, const_cast<V&> (D_inv),
                    const_cast<MV&> (B), X, zero);
   }
@@ -1486,8 +1529,6 @@ sStepApplyImpl (const MV& B, MV& X)
 
   // Special case for the first iteration.
   if (! zeroStartingSolution_) {
-  //if (true) { // for debugging only
-    // mfh 22 May 2019: Tests don't actually exercise this path.
 
     if (sck_.is_null ()) {
       Teuchos::RCP<const op_type> A_op = A_;
@@ -1496,13 +1537,27 @@ sStepApplyImpl (const MV& B, MV& X)
     }
     // W := (1/theta)**D_*(B-A*X) and X := X + W.
     // X := X + W
+    /*
+    Teuchos::Array<MT> norms(W.getNumVectors ());
+    std::cout << "Iteration 0 (*nonzero* init guess)" << std::endl;
+    std::cout << "one/theta=" << one/theta << std::endl;
+    ovD_->norm2(norms);
+    std::cout << "||ovD_||=" << norms[0] << std::endl;
+    PrintVector(*ovD_,"ovDinv");
+    ovB_->norm2(norms);
+    std::cout << "||ovB_||=" << norms[0] << std::endl;
+    PrintVector(*ovB_,"ovB_");
+    ovX_[0]->norm2(norms);
+    std::cout << "||ovX_||=" << norms[0] << std::endl;
+    PrintVector(*ovX_[0],"ovX_");
+    */
     sck_->apply(W, one/theta, const_cast<V&> (*ovD_),
                 const_cast<MV&> (*ovB_), *ovX_[0], zero, hstarts_, numIters_-1, rank);
                 //const_cast<MV&> (*ovB_), *ovX_[0], zero, hstarts_[numIters_-1]); //TODO check this
+    ovX_[0]->update (one, W, one);
   }
   else {
     // W := (1/theta)**D_*B and X := 0 + W.
-    //std::cout << "Iteration 0 (zero init guess)" << std::endl;
     firstIterationWithZeroStartingSolution (W, one/theta, *ovD_, *ovB_, *ovX_[0]);
   }
 

@@ -56,7 +56,7 @@
 #include <type_traits>
 
 //#define RANKPRINT rank==1
-#define RANKPRINT rank==666
+#define RANKPRINT rank==-666
 
 namespace Ifpack2 {
 namespace Details {
@@ -371,38 +371,6 @@ setMatrix (
   extA_ = extA;
 }
 
-#ifdef OLD_APPROACH_COMMUNICATION_NEEDED
-template<class TpetraOperatorType>
-void
-sStepChebyshevKernel<TpetraOperatorType>::
-setMatrix (const Teuchos::RCP<const operator_type>& A)
-{
-  if (A_op_.get () != A.get ()) {
-    A_op_ = A;
-
-    // We'll (re)allocate these on demand.
-    X_colMap_ = std::unique_ptr<vector_type> (nullptr);
-    V1_ = std::unique_ptr<multivector_type> (nullptr);
-
-    using Teuchos::rcp_dynamic_cast;
-    Teuchos::RCP<const crs_matrix_type> A_crs =
-      rcp_dynamic_cast<const crs_matrix_type> (A);
-    if (A_crs.is_null ()) {
-      A_crs_ = Teuchos::null;
-      imp_ = Teuchos::null;
-      exp_ = Teuchos::null;
-    }
-    else {
-      TEUCHOS_ASSERT( A_crs->isFillComplete () );
-      A_crs_ = A_crs;
-      auto G = A_crs->getCrsGraph ();
-      imp_ = G->getImporter ();
-      exp_ = G->getExporter ();
-    }
-  }
-}
-#endif //OLD_APPROACH_COMMUNICATION_NEEDED
-
 template<class TpetraOperatorType>
 void
 sStepChebyshevKernel<TpetraOperatorType>::
@@ -439,30 +407,25 @@ apply (multivector_type& W,
     fusedCase (*W_vec_, alpha, D_inv, *B_vec_, *locA_, *extA_, *X_vec_, beta, hstarts, hind, rank);
   }
   else {
+    /*FIXME this case will fail with:
+
+ p=0: *** Caught standard std::exception of type 'Teuchos::NullReferenceError' :
+
+  /scratch/jhu/trilinos/Trilinos/packages/teuchos/core/src/Teuchos_RCPNode.cpp:753:
+
+  Throw number = 1
+
+  Throw test that evaluated to true: true
+
+  Teuchos::RCP<Tpetra::Vector<double, int, long long, Kokkos::Compat::KokkosDeviceWrapperNode<Kokkos::Serial, Kokkos::HostSpace> > > : You can not call operator->() or operator*() if getRawPtr()==0!
+ [FAILED]  (2.08 sec) Ifpack2Chebyshev_Convergence_UnitTest
+ Location: /scratch/jhu/trilinos/Trilinos/packages/ifpack2/test/unit_tests/Ifpack2_UnitTestChebyshev2.cpp:353
+         
+    */
     TEUCHOS_ASSERT( ! A_op_.is_null () );
     unfusedCase (W, alpha, D_inv, B, *A_op_, *X_vec_, beta);
   }
 } //apply
-
-#ifdef OLD_APPROACH_COMMUNICATION_NEEDED
-template<class TpetraOperatorType>
-typename sStepChebyshevKernel<TpetraOperatorType>::vector_type&
-sStepChebyshevKernel<TpetraOperatorType>::
-importVector (vector_type& X_domMap)
-{
-  if (imp_.is_null ()) {
-    return X_domMap;
-  }
-  else {
-    if (X_colMap_.get () == nullptr) {
-      using V = vector_type;
-      X_colMap_ = std::unique_ptr<V> (new V (imp_->getTargetMap ()));
-    }
-    X_colMap_->doImport (X_domMap, *imp_, Tpetra::REPLACE);
-    return *X_colMap_;
-  }
-} //importVector
-#endif //OLD_APPROACH_COMMUNICATION_NEEDED
 
 template<class TpetraOperatorType>
 bool
