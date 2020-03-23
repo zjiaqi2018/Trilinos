@@ -886,7 +886,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   //FlushAndSleep(comm);
 
-  os2 << "Test7: Results with lambdaMax = " << lambdaMax
+  os2 << "Test7: Results with zero initial guess, lambdaMax = " << lambdaMax
       << ", lambdaMin = " << lambdaMin << ", eigRatio = " << eigRatio << endl
       << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
       << "- s-step Chebyshev:           " << maxsStepNorm / maxInitResNorm << endl
@@ -952,7 +952,7 @@ RCP<Teuchos::FancyOStream> fos = Teuchos::fancyOStream(Teuchos::rcpFromRef(std::
 
   //FlushAndSleep(comm);
 
-  os2 << "Test8: Results with lambdaMax = " << lambdaMax
+  os2 << "Test8: Results with nonzero initial guess, lambdaMax = " << lambdaMax
       << ", lambdaMin = " << lambdaMin << ", eigRatio = " << eigRatio << endl
       << "- Ifpack2::Chebyshev:         " << maxResNormIfpack2 / maxInitResNorm << endl
       << "- s-step Chebyshev:           " << maxsStepNorm / maxInitResNorm << endl
