@@ -89,6 +89,10 @@ public:
   OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
                         const int overlapLevel);
 
+  OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
+                        const int overlapLevel,
+                        const Teuchos::RCP<Teuchos::ParameterList>& pl);
+
   //! Destructor
   ~OverlappingRowMatrix () = default;
 

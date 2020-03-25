@@ -58,12 +58,21 @@ namespace Ifpack2 {
 template<class MatrixType>
 OverlappingRowMatrix<MatrixType>::
 OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
-                      const int overlapLevel) :
+                      const int overlapLevel)
+  : OverlappingRowMatrix(A, overlapLevel, Teuchos::null)
+{}
+
+template<class MatrixType>
+OverlappingRowMatrix<MatrixType>::
+OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
+                      const int overlapLevel,
+                      const Teuchos::RCP<Teuchos::ParameterList>& pl) :
   A_ (Teuchos::rcp_dynamic_cast<const crs_matrix_type> (A, true)),
   OverlapLevel_ (overlapLevel)
 {
   using Teuchos::RCP;
   using Teuchos::rcp;
+  using Teuchos::ParameterList;
   using Teuchos::Array;
   using Teuchos::outArg;
   using Teuchos::REDUCE_SUM;
@@ -163,10 +172,15 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
     mylist[i + numMyRowsA] = ExtElements[i];
   }
 
+  RCP<ParameterList> dist_pl = pl;
+  if (pl.is_null())
+    dist_pl = rcp(new ParameterList());
+  else
+    dist_pl = pl;
   RowMap_ = rcp (new map_type (global_invalid, mylist (),
                                Teuchos::OrdinalTraits<global_ordinal_type>::zero (),
                                A_->getComm ()));
-  Importer_ = rcp (new import_type (A_->getRowMap (), RowMap_));
+  Importer_ = rcp (new import_type (A_->getRowMap (), RowMap_, dist_pl));
   ColMap_ = RowMap_;
 
   // now build the map corresponding to all the external nodes
@@ -174,7 +188,7 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
   ExtMap_ = rcp (new map_type (global_invalid, ExtElements (),
                                Teuchos::OrdinalTraits<global_ordinal_type>::zero (),
                                A_->getComm ()));
-  ExtImporter_ = rcp (new import_type (A_->getRowMap (), ExtMap_));
+  ExtImporter_ = rcp (new import_type (A_->getRowMap (), ExtMap_, dist_pl));
 
   {
     RCP<crs_matrix_type> ExtMatrix_nc =

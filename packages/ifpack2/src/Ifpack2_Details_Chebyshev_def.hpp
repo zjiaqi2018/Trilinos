@@ -327,6 +327,7 @@ Chebyshev (Teuchos::RCP<const row_matrix_type> A) :
   computeMaxResNorm_ (false),
   debug_ (false)
 {
+  dist_pl_ = Teuchos::rcp(new Teuchos::ParameterList());
   checkConstructorInput ();
 }
 
@@ -355,6 +356,7 @@ Chebyshev (Teuchos::RCP<const row_matrix_type> A,
   computeMaxResNorm_ (false),
   debug_ (false)
 {
+  dist_pl_ = Teuchos::rcp(new Teuchos::ParameterList());
   checkConstructorInput ();
   setParameters (params);
 }
@@ -631,6 +633,8 @@ setParameters (Teuchos::ParameterList& plist)
   }
   if (plist.isParameter ("chebyshev: s-step algorithm")) {
     sStepAlgorithm = plist.get<bool> ("chebyshev: s-step algorithm");
+    if (plist.isSublist("chebyshev: overlapping matrix distributor"))
+      dist_pl_ = Teuchos::rcp(new Teuchos::ParameterList(plist.sublist("chebyshev: overlapping matrix distributor")));
   }
 
   if (plist.isParameter ("chebyshev: number of vectors")) {
@@ -871,9 +875,10 @@ Chebyshev<ScalarType, MV>::compute()
   // s-step requires an Ifpack2 overlapping row matrix, in order to access halo information.
   if (sStepAlgorithm_) {
     RCP<const Ifpack2::Details::RowMatrix<row_matrix_type>> if2A = rcp_dynamic_cast<const Ifpack2::Details::RowMatrix<row_matrix_type>>(A_);
-    TEUCHOS_TEST_FOR_EXCEPTION(if2A.is_null(), std::runtime_error, "Ifpack2::Chebyshev::compute: Input matrix cannot be cast to an Ifpack2::Details::RowMatrix, which is required for s-step Chebyshev.");
-    overlappingA_ = rcp_dynamic_cast<const overlapping_row_matrix_type>(if2A);
-    TEUCHOS_TEST_FOR_EXCEPTION(overlappingA_.is_null(), std::runtime_error, "Ifpack2::Chebyshev::compute: Input matrix cannot be cast to an Ifpack2::OverappingRowMatrix, which is required for s-step Chebyshev.");
+    if (!if2A.is_null())
+      overlappingA_ = rcp_dynamic_cast<const overlapping_row_matrix_type>(if2A);
+    if (overlappingA_.is_null())
+      overlappingA_ = Teuchos::rcp(new overlapping_row_matrix_type(A_,numIters_, dist_pl_));
 
     undA_ = rcp_dynamic_cast<const crs_matrix_type>(overlappingA_->getUnderlyingMatrix());
     extA_ = rcp_dynamic_cast<const crs_matrix_type>(overlappingA_->getExtMatrix());

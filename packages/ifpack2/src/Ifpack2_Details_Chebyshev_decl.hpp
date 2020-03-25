@@ -389,6 +389,8 @@ private:
   Teuchos::RCP<MV> ovB_;
   Teuchos::RCP<V> ovD_;
 
+  Teuchos::RCP<Teuchos::ParameterList> dist_pl_;
+
   //! "Operator" implementing W := alpha*D_inv*(B-A*X) + beta*W and X := X+W.
   Teuchos::RCP<ChebyshevKernel<op_type> > ck_;
   Teuchos::RCP<sStepChebyshevKernel<op_type> > sck_;
