@@ -73,6 +73,11 @@
 #include "MueLu_AggregationExportFactory.hpp"
 #include "MueLu_Utilities.hpp"
 
+#ifdef HAVE_MUELU_TPETRA
+// #include "Tpetra_CrsMatrix.hpp"
+#include "Tpetra_Apply_Helpers.hpp"
+#endif
+
 #ifdef HAVE_MUELU_KOKKOS_REFACTOR
 #include "MueLu_AmalgamationFactory_kokkos.hpp"
 #include "MueLu_CoalesceDropFactory_kokkos.hpp"
@@ -1921,6 +1926,7 @@ namespace MueLu {
   void RefMaxwell<Scalar,LocalOrdinal,GlobalOrdinal,Node>::applyInverseAdditive(const MultiVector& RHS, MultiVector& X) const {
 
     Scalar one = Teuchos::ScalarTraits<Scalar>::one();
+    Scalar zero = Teuchos::ScalarTraits<Scalar>::zero();
 
     { // compute residual
 
@@ -1940,20 +1946,20 @@ namespace MueLu {
           D0_Matrix_->apply(*residual_,*D0res_,Teuchos::TRANS);
         }
       } else {
-        if (D0_T_R11_colMapsMatch_) {
-          // Column maps of D0_T and R11 match, and we're running Tpetra
-          {
-            RCP<Teuchos::TimeMonitor> tmD0 = getTimer("MueLu RefMaxwell: restrictions import");
-            D0TR11Tmp_->doImport(*residual_, *rcp_dynamic_cast<CrsMatrixWrap>(R11_)->getCrsMatrix()->getCrsGraph()->getImporter(), Xpetra::INSERT);
+        if ((D0_T_Matrix_->getColMap()->lib() == Xpetra::UseTpetra) &&
+            (R11_->getColMap()->lib() == Xpetra::UseTpetra)) {
+          using Mat = Tpetra::CrsMatrix<SC,LO,GO,NO>;
+          using MV = Tpetra::MultiVector<SC,LO,GO,NO>;
+          std::vector<Mat*> matrices = {
+            rcp_dynamic_cast<TpetraCrsMatrix>(rcp_dynamic_cast<CrsMatrixWrap>(R11_)->getCrsMatrix())->getTpetra_CrsMatrixNonConst().get(),
+            rcp_dynamic_cast<TpetraCrsMatrix>(rcp_dynamic_cast<CrsMatrixWrap>(D0_T_Matrix_)->getCrsMatrix())->getTpetra_CrsMatrixNonConst().get()
+          };
+          MV inVec = toTpetra(*residual_);
+          if (batchedApplyPL_.is_null()) {
+            batchedApplyPL_ = rcp(new ParameterList());
           }
-          {
-            RCP<Teuchos::TimeMonitor> tmD0 = getTimer("MueLu RefMaxwell: restriction (2,2) (explicit)");
-            rcp_dynamic_cast<TpetraCrsMatrix>(rcp_dynamic_cast<CrsMatrixWrap>(D0_T_Matrix_)->getCrsMatrix())->getTpetra_CrsMatrix()->localApply(toTpetra(*D0TR11Tmp_),toTpetra(*D0res_),Teuchos::NO_TRANS);
-          }
-          {
-            RCP<Teuchos::TimeMonitor> tmP11 = getTimer("MueLu RefMaxwell: restriction coarse (1,1) (explicit)");
-            rcp_dynamic_cast<TpetraCrsMatrix>(rcp_dynamic_cast<CrsMatrixWrap>(R11_)->getCrsMatrix())->getTpetra_CrsMatrix()->localApply(toTpetra(*D0TR11Tmp_),toTpetra(*P11res_),Teuchos::NO_TRANS);
-          }
+          std::vector<MV*> outVecs = {&toTpetra(*P11res_), &toTpetra(*D0res_)};
+          Tpetra::batchedApply(matrices, inVec, outVecs, one, zero, batchedApplyPL_);
         } else {
           {
             RCP<Teuchos::TimeMonitor> tmP11 = getTimer("MueLu RefMaxwell: restriction coarse (1,1) (explicit)");
@@ -1964,6 +1970,30 @@ namespace MueLu {
             D0_T_Matrix_->apply(*residual_,*D0res_,Teuchos::NO_TRANS);
           }
         }
+        // if (D0_T_R11_colMapsMatch_) {
+        //   // Column maps of D0_T and R11 match, and we're running Tpetra
+        //   {
+        //     RCP<Teuchos::TimeMonitor> tmD0 = getTimer("MueLu RefMaxwell: restrictions import");
+        //     D0TR11Tmp_->doImport(*residual_, *rcp_dynamic_cast<CrsMatrixWrap>(R11_)->getCrsMatrix()->getCrsGraph()->getImporter(), Xpetra::INSERT);
+        //   }
+        //   {
+        //     RCP<Teuchos::TimeMonitor> tmD0 = getTimer("MueLu RefMaxwell: restriction (2,2) (explicit)");
+        //     rcp_dynamic_cast<TpetraCrsMatrix>(rcp_dynamic_cast<CrsMatrixWrap>(D0_T_Matrix_)->getCrsMatrix())->getTpetra_CrsMatrix()->localApply(toTpetra(*D0TR11Tmp_),toTpetra(*D0res_),Teuchos::NO_TRANS);
+        //   }
+        //   {
+        //     RCP<Teuchos::TimeMonitor> tmP11 = getTimer("MueLu RefMaxwell: restriction coarse (1,1) (explicit)");
+        //     rcp_dynamic_cast<TpetraCrsMatrix>(rcp_dynamic_cast<CrsMatrixWrap>(R11_)->getCrsMatrix())->getTpetra_CrsMatrix()->localApply(toTpetra(*D0TR11Tmp_),toTpetra(*P11res_),Teuchos::NO_TRANS);
+        //   }
+        // } else {
+        //   {
+        //     RCP<Teuchos::TimeMonitor> tmP11 = getTimer("MueLu RefMaxwell: restriction coarse (1,1) (explicit)");
+        //     R11_->apply(*residual_,*P11res_,Teuchos::NO_TRANS);
+        //   }
+        //   {
+        //     RCP<Teuchos::TimeMonitor> tmD0 = getTimer("MueLu RefMaxwell: restriction (2,2) (explicit)");
+        //     D0_T_Matrix_->apply(*residual_,*D0res_,Teuchos::NO_TRANS);
+        //   }
+        // }
       }
     }
 

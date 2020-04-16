@@ -436,6 +436,7 @@ namespace MueLu {
     std::string mode_;
     //! Temporary memory
     mutable Teuchos::RCP<MultiVector> P11res_, P11x_, D0res_, D0x_, residual_, P11resTmp_, P11xTmp_, D0resTmp_, D0xTmp_, D0TR11Tmp_;
+    mutable Teuchos::RCP<Teuchos::ParameterList> batchedApplyPL_;
   };
 
 } // namespace
