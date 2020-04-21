@@ -84,6 +84,7 @@ public:
   Teuchos::ParameterList &
   getStepSizeParams();
 
+
 private:
   /** \name Overridden from Thyra::ModelEvaluatorDefaultBase . */
   //@{
@@ -92,6 +93,8 @@ private:
       const Thyra::ModelEvaluatorBase::InArgs<Scalar>& inArgs,
       const Thyra::ModelEvaluatorBase::OutArgs<Scalar>& outArgs) const;
   //@}
+
+  Teuchos::RCP<Thyra::VectorBase<Scalar>> setupRowSumScalingObjects() const; 
 
   Teuchos::RCP<Teuchos::ParameterList> piroParams_;
   Teuchos::RCP<LOCA::Thyra::SaveDataStrategy> saveDataStrategy_;
@@ -106,7 +109,12 @@ private:
   Teuchos::RCP<LOCA::Stepper> stepper_;
   mutable bool first_;
   
-  Teuchos::RCP<Thyra::ModelEvaluator<Scalar> > model_; 
+  Teuchos::RCP<Thyra::ModelEvaluator<Scalar> > model_;
+
+  NOX::RowSumScaling::ENOX_WhenToUpdateScaling when_to_update_;
+  std::string function_scaling_; 
+  bool do_row_sum_scaling_; 
+  Teuchos::RCP<Teuchos::ParameterList> nox_params_;  
 };
 
 
