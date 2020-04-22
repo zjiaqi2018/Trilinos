@@ -119,14 +119,14 @@ Piro::LOCASolver<Scalar>::LOCASolver(
   const NOX::Thyra::Vector initialGuess(*model_->getNominalValues().get_x());
 
   // Get NOX->Thyra Group Options sublist and set params relevant to row sum scaling
-  nox_params_ = Teuchos::sublist(piroParams_, "NOX"); 
-  Teuchos::ParameterList& thyra_group_options_sublist = nox_params_->sublist("Thyra Group Options");
-  std::string string_when_to_update = thyra_group_options_sublist.get<std::string>("Update Row Sum Scaling"); 
+  const Teuchos::RCP<Teuchos::ParameterList> thyra_group_options_sublist =
+    Teuchos::sublist(Teuchos::sublist(piroParams_, "NOX"), "Thyra Group Options");
+  std::string string_when_to_update = thyra_group_options_sublist->get<std::string>("Update Row Sum Scaling"); 
   if (string_when_to_update == "Before Each Nonlinear Solve")
     when_to_update_ = NOX::RowSumScaling::UpdateInvRowSumVectorAtBeginningOfSolve;
   else if (string_when_to_update == "Before Each Nonlinear Iteration")
     when_to_update_ = NOX::RowSumScaling::UpdateInvRowSumVectorAtBeginningOfIteration;
-  function_scaling_ = thyra_group_options_sublist.get<std::string>("Function Scaling");
+  function_scaling_ = thyra_group_options_sublist->get<std::string>("Function Scaling");
   if (function_scaling_ =="Row Sum")
     do_row_sum_scaling_ = true;
   else
@@ -159,7 +159,9 @@ Piro::LOCASolver<Scalar>::LOCASolver(
   const Teuchos::RCP<Teuchos::ParameterList> noxStatusParams =
     Teuchos::sublist(Teuchos::sublist(piroParams_, "NOX"), "Status Tests");
   noxStatusTests_ = NOX::StatusTest::buildStatusTests(*noxStatusParams, *(globalData_->locaUtils));
-  
+
+  std::cout << "IKT piroParams modified = " << *piroParams_ << "\n";  
+
   stepper_ = Teuchos::rcp(new LOCA::Stepper(globalData_, group_, locaStatusTests_, noxStatusTests_, piroParams_));
   first_ = true;
 
@@ -272,12 +274,14 @@ Piro::LOCASolver<Scalar>::setupRowSumScalingObjects() const
   Teuchos::RCP<NOX::Abstract::PrePostOperator> row_sum_observer =
       Teuchos::rcp(new NOX::RowSumScaling(scaling_vector, when_to_update_));
 
-  if (nox_params_->sublist("Solver Options").
+  Teuchos::ParameterList& nox_params = piroParams_->sublist("NOX");  
+
+  if (nox_params.sublist("Solver Options").
     isType< Teuchos::RCP<NOX::Abstract::PrePostOperator> >("User Defined Pre/Post Operator")) {
     std::cout << "IKT here1\n"; 
 
     Teuchos::RCP<NOX::Abstract::PrePostOperator> user_observer =
-      nox_params_->sublist("Solver Options").get< Teuchos::RCP<NOX::Abstract::PrePostOperator> >("User Defined Pre/Post Operator");
+      nox_params.sublist("Solver Options").get< Teuchos::RCP<NOX::Abstract::PrePostOperator> >("User Defined Pre/Post Operator");
 
     // NOTE: the row_sum_observer should be evalauted after any user
     // oberservers to make sure that the jacobian is accurate.  This
@@ -290,11 +294,11 @@ Piro::LOCASolver<Scalar>::setupRowSumScalingObjects() const
     observer_vector->pushBack(user_observer);
     observer_vector->pushBack(row_sum_observer);
 
-    nox_params_->sublist("Solver Options").set< Teuchos::RCP<NOX::Abstract::PrePostOperator> >("User Defined Pre/Post Operator", observer_vector);
+    nox_params.sublist("Solver Options").set< Teuchos::RCP<NOX::Abstract::PrePostOperator> >("User Defined Pre/Post Operator", observer_vector);
   }
   else {
     std::cout << "IKT here2\n"; 
-    nox_params_->sublist("Solver Options").set< Teuchos::RCP<NOX::Abstract::PrePostOperator> >("User Defined Pre/Post Operator", row_sum_observer);
+    nox_params.sublist("Solver Options").set< Teuchos::RCP<NOX::Abstract::PrePostOperator> >("User Defined Pre/Post Operator", row_sum_observer);
   }
 
   // Set the weighted merit function.  Throw error if a user defined
@@ -302,10 +306,10 @@ Piro::LOCASolver<Scalar>::setupRowSumScalingObjects() const
   // ETP 5/23/16 -- Commenting this out because the parameter list may have
   // been reused from previous solves, and so the merit function that has been
   // set below from previous solves may still be there.
-  //TEUCHOS_ASSERT( !(nox_params_->sublist("Solver Options").isType<Teuchos::RCP<NOX::MeritFunction::Generic> >("User Defined Merit Function")));
+  //TEUCHOS_ASSERT( !(nox_params.sublist("Solver Options").isType<Teuchos::RCP<NOX::MeritFunction::Generic> >("User Defined Merit Function")));
 
   Teuchos::RCP<NOX::MeritFunction::Generic> mf = Teuchos::rcp(new NOX::Thyra::WeightedMeritFunction(scaling_vector));
-  nox_params_->sublist("Solver Options").set<Teuchos::RCP<NOX::MeritFunction::Generic> >("User Defined Merit Function",mf);
+  nox_params.sublist("Solver Options").set<Teuchos::RCP<NOX::MeritFunction::Generic> >("User Defined Merit Function",mf);
   return scaling_vector; 
 }
 
