@@ -270,7 +270,7 @@ fi
 
 export ATDM_CONFIG_HDF5_LIBS="${HDF5_ROOT}/lib/libhdf5_hl.${ATDM_CONFIG_TPL_LIB_EXT};${HDF5_ROOT}/lib/libhdf5.${ATDM_CONFIG_TPL_LIB_EXT};${SEMS_ZLIB_ROOT}/lib/libz.${ATDM_CONFIG_TPL_LIB_EXT};-ldl"
 
-export ATDM_CONFIG_NETCDF_LIBS="${SEMS_NETCDF_ROOT}/lib/libnetcdf.${ATDM_CONFIG_TPL_LIB_EXT};${PNETCDF_ROOT}/lib/libpnetcdf.${ATDM_CONFIG_TPL_LIB_EXT};${ATDM_CONFIG_HDF5_LIBS};-lcurl"
+export ATDM_CONFIG_NETCDF_LIBS="${SEMS_NETCDF_ROOT}/lib/libnetcdf.${ATDM_CONFIG_TPL_LIB_EXT};${PNETCDF_ROOT}/lib/libpnetcdf.a;${ATDM_CONFIG_HDF5_LIBS};-lcurl"
 
 # NOTE: SEMS does not provide the correct *.so files for NetCDF so we can't
 # use them in a shared lib build :-(
@@ -281,5 +281,10 @@ export MPICXX=`which mpicxx`
 export MPIF90=`which mpif90`
 
 export ATDM_CONFIG_MPI_PRE_FLAGS="--bind-to;none"
+
+# Install-related stuff
+export ATDM_CONFIG_TRIL_CMAKE_INSTALL_PREFIX_DATE_BASE_DEFAULT=/projects/atdm_devops/trilinos_installs
+export ATDM_CONFIG_MAKE_INSTALL_GROUP_DEFAULT=wg-run-as-atdm-devops
+# NOTE: Above assumes that one is running on a CEE RHE7 machine!
 
 export ATDM_CONFIG_COMPLETED_ENV_SETUP=TRUE

@@ -196,7 +196,7 @@ fi
 
 export ATDM_CONFIG_HDF5_LIBS="${HDF5_ROOT}/lib/libhdf5_hl.${ATDM_CONFIG_TPL_LIB_EXT};${HDF5_ROOT}/lib/libhdf5.${ATDM_CONFIG_TPL_LIB_EXT};${ZLIB_ROOT}/lib/libz.${ATDM_CONFIG_TPL_LIB_EXT};-ldl"
 
-export ATDM_CONFIG_NETCDF_LIBS="-L${NETCDF_ROOT}/lib;${NETCDF_ROOT}/lib/libnetcdf.${ATDM_CONFIG_TPL_LIB_EXT};${PNETCDF_ROOT}/lib/libpnetcdf.${ATDM_CONFIG_TPL_LIB_EXT};${ATDM_CONFIG_HDF5_LIBS};-lcurl"
+export ATDM_CONFIG_NETCDF_LIBS="-L${NETCDF_ROOT}/lib;${NETCDF_ROOT}/lib/libnetcdf.${ATDM_CONFIG_TPL_LIB_EXT};${PNETCDF_ROOT}/lib/libpnetcdf.a;${ATDM_CONFIG_HDF5_LIBS};-lcurl"
 
 # NOTE: SEMS does not provide a *.a files for PNetCDF so we can't use them in
 # a shared lib build :-(
@@ -214,6 +214,7 @@ export ATDM_CONFIG_MPI_PRE_FLAGS="--bind-to;none"
 
 export ATDM_CONFIG_WORKSPACE_BASE_DEFAULT=/home/atdm-devops-admin/jenkins
 export ATDM_CONFIG_TRIL_CMAKE_INSTALL_PREFIX_DATE_BASE_DEFAULT=/home/atdm-devops-admin/trilinos_installs
+export ATDM_CONFIG_MAKE_INSTALL_GROUP_DEFAULT=wg-run-as-atdm-devops
 export ATDM_CONFIG_INSTALL_PBP_RUNNER_DEFAULT=/home/atdm-devops-admin/tools/run-as-atdm-devops-admin
 
 #

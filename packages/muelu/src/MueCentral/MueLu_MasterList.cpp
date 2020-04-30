@@ -139,6 +139,7 @@ namespace MueLu {
     if (name == "tentative: constant column sums") { ss << "<Parameter name=\"tentative: constant column sums\" type=\"bool\" value=" << value << "/>"; return ss.str(); }      
     if (name == "repartition: enable") { ss << "<Parameter name=\"repartition: enable\" type=\"bool\" value=" << value << "/>"; return ss.str(); }      
     if (name == "repartition: start level") { ss << "<Parameter name=\"repartition: start level\" type=\"int\" value=" << value << "/>"; return ss.str(); }      
+    if (name == "repartition: use map") { ss << "<Parameter name=\"repartition: use map\" type=\"bool\" value=" << value << "/>"; return ss.str(); }      
     if (name == "repartition: node repartition level") { ss << "<Parameter name=\"repartition: node repartition level\" type=\"int\" value=" << value << "/>"; return ss.str(); }      
     if (name == "repartition: node id") { ss << "<Parameter name=\"repartition: node id\" type=\"int\" value=" << value << "/>"; return ss.str(); }      
     if (name == "repartition: min rows per proc") { ss << "<Parameter name=\"repartition: min rows per proc\" type=\"int\" value=" << value << "/>"; return ss.str(); }      
@@ -199,6 +200,9 @@ namespace MueLu {
   "<Parameter name=\"aggregation: brick x size\" type=\"int\" value=\"2\"/>"
   "<Parameter name=\"aggregation: brick y size\" type=\"int\" value=\"2\"/>"
   "<Parameter name=\"aggregation: brick z size\" type=\"int\" value=\"2\"/>"
+  "<Parameter name=\"aggregation: brick x Dirichlet\" type=\"bool\" value=\"false\"/>"
+  "<Parameter name=\"aggregation: brick y Dirichlet\" type=\"bool\" value=\"false\"/>"
+  "<Parameter name=\"aggregation: brick z Dirichlet\" type=\"bool\" value=\"false\"/>"
   "<Parameter name=\"aggregation: max selected neighbors\" type=\"int\" value=\"0\"/>"
   "<Parameter name=\"aggregation: Dirichlet threshold\" type=\"double\" value=\"0.0\"/>"
   "<Parameter name=\"aggregation: deterministic\" type=\"bool\" value=\"false\"/>"
@@ -277,6 +281,7 @@ namespace MueLu {
   "<Parameter name=\"repartition: partitioner\" type=\"string\" value=\"zoltan2\"/>"
   "<ParameterList name=\"repartition: params\"/>"
   "<Parameter name=\"repartition: start level\" type=\"int\" value=\"2\"/>"
+  "<Parameter name=\"repartition: use map\" type=\"bool\" value=\"false\"/>"
   "<Parameter name=\"repartition: node repartition level\" type=\"int\" value=\"-1\"/>"
   "<Parameter name=\"repartition: node id\" type=\"int\" value=\"-1\"/>"
   "<Parameter name=\"repartition: min rows per proc\" type=\"int\" value=\"800\"/>"
@@ -579,6 +584,12 @@ namespace MueLu {
       
          ("aggregation: brick z size","aggregation: brick z size")
       
+         ("aggregation: brick x Dirichlet","aggregation: brick x Dirichlet")
+      
+         ("aggregation: brick y Dirichlet","aggregation: brick y Dirichlet")
+      
+         ("aggregation: brick z Dirichlet","aggregation: brick z Dirichlet")
+      
          ("aggregation: max selected neighbors","aggregation: max selected neighbors")
       
          ("aggregation: Dirichlet threshold","aggregation: Dirichlet threshold")
@@ -734,6 +745,8 @@ namespace MueLu {
          ("repartition: params","repartition: params")
       
          ("repartition: start level","repartition: start level")
+      
+         ("repartition: use map","repartition: use map")
       
          ("repartition: node repartition level","repartition: node repartition level")
       
