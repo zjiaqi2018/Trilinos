@@ -169,6 +169,7 @@ else
 fi
 
 module load sems-openmpi/1.10.1
+module load sems-boost/1.59.0/base
 module load sems-netcdf/4.7.3/parallel
 module load sems-hdf5/1.10.6/parallel
 module load sems-zlib/1.2.8/base
@@ -214,7 +215,6 @@ export ATDM_CONFIG_MPI_PRE_FLAGS="--bind-to;none"
 
 export ATDM_CONFIG_WORKSPACE_BASE_DEFAULT=/home/atdm-devops-admin/jenkins
 export ATDM_CONFIG_TRIL_CMAKE_INSTALL_PREFIX_DATE_BASE_DEFAULT=/home/atdm-devops-admin/trilinos_installs
-export ATDM_CONFIG_MAKE_INSTALL_GROUP_DEFAULT=wg-run-as-atdm-devops
 export ATDM_CONFIG_INSTALL_PBP_RUNNER_DEFAULT=/home/atdm-devops-admin/tools/run-as-atdm-devops-admin
 
 #
