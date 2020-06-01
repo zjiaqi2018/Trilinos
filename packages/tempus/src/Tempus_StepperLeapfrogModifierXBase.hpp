@@ -35,7 +35,15 @@ namespace Tempus {
  *  \renewcommand{\thealgorithm}{}
  *  \caption{Leapfrog with the locations of the application actions indicated}
  *  \begin{algorithmic}[1]
- *     TODO
+ *    \State \quad {\it appAction.execute(solutionHistory, stepper, X\_BEGIN\_STEP)}                            
+ *    \State Compute $\dot{x}_{n+1/2} = \dot{x}_n + 0.5\Delta t \ddot{x}_n$                                      
+ *    \State \quad {\it appAction.execute(solutionHistory, stepper, X\_BEFORE\_X\_UPDATE)}                      
+ *    \State Compute $x_{n+1} = x_n + \Delta t \dot{x}_{n+1/2}$                                                  
+ *    \State \quad {\it appAction.execute(solutionHistory, stepper, X\_BEFORE\_EXPLICIT\_EVAL)}                
+ *    \State Evaluate $\ddot{x}_{n+1} = f(x_{n+1},t_{n+1})$                                                      
+ *    \State \quad {\it appAction.execute(solutionHistory, stepper, XDOT\_BEFORE\_XDOT\_UPDATE)}          
+ *    \State Compute half-step sync $\dot{x}_{n+1} = \dot{x}_{n+1/2} + 0.5 \Delta t \ddot{x}_{n+1}$ or full step 
+$\dot{x}_{n+3/2} = \dot{x}_{n+1/2} + \Delta t \ddot{x}_{n+1}$     
  *  \end{algorithmic}
  *  \f}
  */
@@ -79,31 +87,31 @@ private:
         x = workingState->getX();
         break;
       }
-      case StepperLeapfrogAAppAction<Scalar>::BEFORE_XDOT_UPDATE_INITIALIZE:
+      case StepperLeapfrogAppAction<Scalar>::BEFORE_XDOT_UPDATE_INITIALIZE:
       {
         modType = X_BEFORE_XDOT_UPDATE_INITIALIZE;
         x = workingState->getX();
         break;
       }
-      case StepperLeapfrogAAppAction<Scalar>::BEFORE_X_UPDATE:
+      case StepperLeapfrogAppAction<Scalar>::BEFORE_X_UPDATE:
       {
         modType = X_BEFORE_X_UPDATE;
         x = workingState->getX();
         break;
       }
-      case StepperLeapfrogAAppAction<Scalar>::BEFORE_EXPLICIT_EVAL:
+      case StepperLeapfrogAppAction<Scalar>::BEFORE_EXPLICIT_EVAL:
       {
         modType = X_BEFORE_EXPLICIT_EVAL;
         x = workingState->getX();
         break;
       }
-      case StepperLeapfrogAAppAction<Scalar>::BEFORE_XDOT_UDPATE:
+      case StepperLeapfrogAppAction<Scalar>::BEFORE_XDOT_UPDATE:
       {
-        modType = X_BEFORE_XDOT_UDPATE;
+        modType = X_BEFORE_XDOT_UPDATE;
         x = workingState->getX();
         break;
       }
-      case StepperLeapfrogAAppAction<Scalar>::END_STEP:
+      case StepperLeapfrogAppAction<Scalar>::END_STEP:
       {
         modType = XDOT_END_STEP;
         x = stepper->getStepperXDot(workingState);
@@ -125,7 +133,7 @@ public:
     X_BEFORE_XDOT_UPDATE_INITIALIZE,     ///< Modify \f$x\f$ before updating xDot while initializing xDotDot
     X_BEFORE_X_UPDATE,     ///< Modify \f$x\f$ before updating x   
     X_BEFORE_EXPLICIT_EVAL,   ///< Modify \f$x\f$ before the explicit ME evaluation
-    X_BEFORE_XDOT_UDPATE, //Modify \f$x\f$ Before updating xDot 
+    X_BEFORE_XDOT_UPDATE, //Modify \f$x\f$ Before updating xDot 
     XDOT_END_STEP     ///< Modify \f$\dot{x}\f$ at the end of the step.
   };
 
