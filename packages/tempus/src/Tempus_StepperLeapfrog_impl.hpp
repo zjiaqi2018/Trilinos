@@ -67,9 +67,9 @@ StepperLeapfrog<Scalar>::StepperLeapfrog(
     this->setUseFSAL(            useFSAL);
     this->setICConsistency(      ICConsistency);
     this->setICConsistencyCheck( ICConsistencyCheck);
-
+#ifndef TEMPUS_HIDE_DEPRECATED_CODE
     this->setObserver();
-
+#endif
     this->setAppAction(stepperLFAppAction);
     if (appModel != Teuchos::null) {
 
@@ -162,13 +162,13 @@ void StepperLeapfrog<Scalar>::takeStep(
       "  or \"Storage Type\" = \"Static\" and \"Storage Limit\" = \"2\"\n");
 
     //this->stepperObserver_->observeBeginTakeStep(solutionHistory, *this);
+    RCP<StepperLeapfrog<Scalar> > thisStepper = Teuchos::rcpFromRef(*this);
+    stepperLFAppAction_->execute(solutionHistory, thisStepper,
+      StepperLeapfrogAppAction<Scalar>::ACTION_LOCATION::BEGIN_STEP);
     RCP<SolutionState<Scalar> > currentState=solutionHistory->getCurrentState();
     RCP<SolutionState<Scalar> > workingState=solutionHistory->getWorkingState();
     const Scalar time = currentState->getTime();
     const Scalar dt   = workingState->getTimeStep();
-
-
-    RCP<StepperLeapfrog<Scalar> > thisStepper = Teuchos::rcpFromRef(*this);
    
     // Perform half-step startup if working state is synced
     // (i.e., xDot and x are at the same time level).
@@ -227,6 +227,8 @@ void StepperLeapfrog<Scalar>::takeStep(
     workingState->setOrder(this->getOrder());
     workingState->computeNorms(currentState);
     //this->stepperObserver_->observeEndTakeStep(solutionHistory, *this);
+    stepperLFAppAction_->execute(solutionHistory, thisStepper,
+      StepperLeapfrogAppAction<Scalar>::ACTION_LOCATION::END_STEP);
   }
   return;
 }

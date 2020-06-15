@@ -54,7 +54,6 @@ public:
   /// Indicates the location of application action (see algorithm).
   enum ACTION_LOCATION {
     BEGIN_STEP,     ///< At the beginning of the step.                                     
-    BEFORE_XDOT_UPDATE_INITIALIZE, // Before updating xDot while initializing xDotDot      
     BEFORE_X_UPDATE, //  Before updating x                                                 
     BEFORE_EXPLICIT_EVAL,   /// Before the explicit ME evaluation.                         
     BEFORE_XDOT_UPDATE, /// Before updating xDot                                           

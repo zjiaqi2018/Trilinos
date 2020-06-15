@@ -87,12 +87,6 @@ private:
         x = workingState->getX();
         break;
       }
-      case StepperLeapfrogAppAction<Scalar>::BEFORE_XDOT_UPDATE_INITIALIZE:
-      {
-        modType = X_BEFORE_XDOT_UPDATE_INITIALIZE;
-        x = workingState->getX();
-        break;
-      }
       case StepperLeapfrogAppAction<Scalar>::BEFORE_X_UPDATE:
       {
         modType = X_BEFORE_X_UPDATE;
@@ -130,7 +124,6 @@ public:
   /// Indicates the location of application action (see algorithm).
   enum MODIFIER_TYPE {
     X_BEGIN_STEP,     ///< Modify \f$x\f$ at the beginning of the step.
-    X_BEFORE_XDOT_UPDATE_INITIALIZE,     ///< Modify \f$x\f$ before updating xDot while initializing xDotDot
     X_BEFORE_X_UPDATE,     ///< Modify \f$x\f$ before updating x   
     X_BEFORE_EXPLICIT_EVAL,   ///< Modify \f$x\f$ before the explicit ME evaluation
     X_BEFORE_XDOT_UPDATE, //Modify \f$x\f$ Before updating xDot 

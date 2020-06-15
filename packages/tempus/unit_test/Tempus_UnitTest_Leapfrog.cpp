@@ -108,8 +108,8 @@ public:
   /// Constructor                                                                                                                                       
   StepperLeapfrogModifierTest()
     : testBEGIN_STEP(false), testBEFORE_X_UPDATE(false),testBEFORE_EXPLICIT_EVAL(false),
-      testBEFORE_XDOT_UPDATE(false), testCurrentValue(-0.99), testWorkingValue(-0.99),
-      testDt(-1.5), testType("")
+      testBEFORE_XDOT_UPDATE(false),testEND_STEP(false), testCurrentXValue(-0.99),
+      testWorkingXValue(-0.99),testWorkingXDotValue(-0.99),testDt(-1.5), testType("")
   {}
 
   /// Destructor                                                                                                                                        
@@ -117,16 +117,16 @@ public:
 
   /// Observe Leapfrog Stepper at end of takeStep.                                                                                                  
   virtual void modify(
-                      Teuchos::RCP<Tempus::SolutionHistory<double> > sh,
-                      Teuchos::RCP<Tempus::StepperLeapfrog<double> > stepper,
-                      const typename Tempus::StepperLeapfrogAppAction<double>::ACTION_LOCATION actLoc)
+    Teuchos::RCP<Tempus::SolutionHistory<double> > sh,
+    Teuchos::RCP<Tempus::StepperLeapfrog<double> > stepper,
+    const typename Tempus::StepperLeapfrogAppAction<double>::ACTION_LOCATION actLoc)
   {
     switch(actLoc) {
     case StepperLeapfrogAppAction<double>::BEGIN_STEP:
       {
         testBEGIN_STEP = true;
         auto x = sh->getCurrentState()->getX();
-        testCurrentValue = get_ele(*(x), 0);
+        testCurrentXValue = get_ele(*(x), 0);
         break;
       }
     case StepperLeapfrogAppAction<double>::BEFORE_EXPLICIT_EVAL:
@@ -147,7 +147,14 @@ public:
       {
         testBEFORE_XDOT_UPDATE = true;
         auto x = sh->getWorkingState()->getX();
-        testWorkingValue = get_ele(*(x), 0);
+        testWorkingXValue = get_ele(*(x), 0);
+        break;
+      }
+    case StepperLeapfrogAppAction<double>::END_STEP:
+      {
+        testEND_STEP = true;
+        auto x = sh->getWorkingState()->getXDot();
+        testWorkingXDotValue = get_ele(*(x), 0);
         break;
       }
     default:
@@ -159,8 +166,10 @@ public:
   bool testBEFORE_EXPLICIT_EVAL;
   bool testBEFORE_X_UPDATE;
   bool testBEFORE_XDOT_UPDATE;
-  double testCurrentValue;
-  double testWorkingValue;
+  bool testEND_STEP;
+  double testCurrentXValue;
+  double testWorkingXValue;
+  double testWorkingXDotValue;
   double testDt;
   std::string testType;
 };
@@ -211,13 +220,17 @@ TEUCHOS_UNIT_TEST(Leapfrog, AppAction_Modifier)
   TEST_COMPARE(modifier->testBEFORE_EXPLICIT_EVAL, ==, true);
   TEST_COMPARE(modifier->testBEFORE_X_UPDATE, ==, true);
   TEST_COMPARE(modifier->testBEFORE_XDOT_UPDATE, ==, true);
+  TEST_COMPARE(modifier->testEND_STEP, ==, true);
 
   auto x = solutionHistory->getCurrentState()->getX();
-  TEST_FLOATING_EQUALITY(modifier->testCurrentValue, get_ele(*(x), 0), 1.0e-15);
+  TEST_FLOATING_EQUALITY(modifier->testCurrentXValue, get_ele(*(x), 0), 1.0e-15);
   x = solutionHistory->getWorkingState()->getX();
-  TEST_FLOATING_EQUALITY(modifier->testWorkingValue, get_ele(*(x), 0), 1.0e-15);
+  TEST_FLOATING_EQUALITY(modifier->testWorkingXValue, get_ele(*(x), 0), 1.0e-15);
   auto Dt = solutionHistory->getWorkingState()->getTimeStep();
   TEST_FLOATING_EQUALITY(modifier->testDt, Dt, 1.0e-15);
+  auto xdot = solutionHistory->getWorkingState()->getXDot();
+  TEST_FLOATING_EQUALITY(modifier->testWorkingXDotValue, get_ele(*(xdot), 0), 1.0e-15);
+
 
   TEST_COMPARE(modifier->testType, ==, "Leapfrog - Modifier");
 };
@@ -232,7 +245,8 @@ public:
   StepperLeapfrogModifierXTest()
     : testX_BEGIN_STEP(false), testX_BEFORE_EXPLICIT_EVAL(false),
       testX_BEFORE_X_UPDATE(false), testX_BEFORE_XDOT_UPDATE(false),
-      testX(0.0), testDt(-1.25), testTime(-1.25),testType("")
+      testXDOT_END_STEP(false),testX(0.0),testXDot(0.99), testDt(-1.25), 
+      testTime(-1.25),testType("")
   {}
 
   /// Destructor                                                                                                                                      
@@ -269,6 +283,12 @@ public:
 	testType = "Leapfrog - ModifierX";
         break;
       }
+    case StepperLeapfrogModifierXBase<double>::XDOT_END_STEP:
+      {
+        testXDOT_END_STEP = true;
+        testXDot = get_ele(*(x), 0);
+        break;
+      }
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error,
                                  "Error - unknown action location.\n");
@@ -278,7 +298,9 @@ public:
   bool testX_BEFORE_EXPLICIT_EVAL;
   bool testX_BEFORE_X_UPDATE;
   bool testX_BEFORE_XDOT_UPDATE;
+  bool testXDOT_END_STEP;
   double testX;
+  double testXDot;
   double testDt;
   double testTime;
   std::string testType;
@@ -330,6 +352,7 @@ TEUCHOS_UNIT_TEST(LeapFrog, AppAction_ModifierX)
   TEST_COMPARE(modifierX->testX_BEFORE_EXPLICIT_EVAL, ==, true);
   TEST_COMPARE(modifierX->testX_BEFORE_XDOT_UPDATE, ==, true);
   TEST_COMPARE(modifierX->testX_BEFORE_X_UPDATE, ==, true);
+  TEST_COMPARE(modifierX->testXDOT_END_STEP, ==, true);
 
   auto x = solutionHistory->getCurrentState()->getX();
   TEST_FLOATING_EQUALITY(modifierX->testX, get_ele(*(x), 0), 1.0e-15);
@@ -338,6 +361,8 @@ TEUCHOS_UNIT_TEST(LeapFrog, AppAction_ModifierX)
   auto time = solutionHistory->getWorkingState()->getTime();
   TEST_FLOATING_EQUALITY(modifierX->testTime, time, 1.0e-15);
   TEST_COMPARE(modifierX->testType, ==, "Leapfrog - ModifierX");
+  auto xdot = solutionHistory->getWorkingState()->getXDot();
+  TEST_FLOATING_EQUALITY(modifierX->testXDot, get_ele(*(xdot), 0), 1.0e-15);
 
 };
 
@@ -351,7 +376,7 @@ public:
   StepperLeapfrogObserverTest()
     : testBEGIN_STEP(false), testBEFORE_EXPLICIT_EVAL(false),
       testBEFORE_X_UPDATE(false), testBEFORE_XDOT_UPDATE(false),
-      testCurrentValue(-0.99), testWorkingValue(-0.99),
+      testCurrentXValue(-0.99), testWorkingXValue(-0.99),testWorkingXDotValue(0.99),
       testDt(-1.5), testType("")
   {}
   /// Destructor                                                                                                         
@@ -368,7 +393,7 @@ public:
       {
         testBEGIN_STEP = true;
         auto x = sh->getCurrentState()->getX();
-        testCurrentValue = get_ele(*(x), 0);
+        testCurrentXValue = get_ele(*(x), 0);
         break;
       }
     case StepperLeapfrogAppAction<double>::BEFORE_EXPLICIT_EVAL:
@@ -387,9 +412,17 @@ public:
       {
         testBEFORE_XDOT_UPDATE = true;
         auto x = sh->getWorkingState()->getX();
-        testWorkingValue = get_ele(*(x), 0);
+        testWorkingXValue = get_ele(*(x), 0);
         break;
       }
+    case StepperLeapfrogAppAction<double>::END_STEP:
+      {
+        testEND_STEP = true;
+        auto x = sh->getWorkingState()->getXDot();
+        testWorkingXDotValue = get_ele(*(x), 0);
+        break;
+      }
+
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error,
 				 "Error - unknown action location.\n");
@@ -399,8 +432,10 @@ public:
   bool testBEFORE_EXPLICIT_EVAL;
   bool testBEFORE_X_UPDATE;
   bool testBEFORE_XDOT_UPDATE;
-  double testCurrentValue;
-  double testWorkingValue;
+  bool testEND_STEP;
+  double testCurrentXValue;
+  double testWorkingXValue;
+  double testWorkingXDotValue;
   double testDt;
   std::string testType;
 };
@@ -448,14 +483,22 @@ TEUCHOS_UNIT_TEST(Leapfrog, AppAction_Observer)
   solutionHistory->getWorkingState()->setTimeStep(dt);
   stepper->takeStep(solutionHistory);
 
+  TEST_COMPARE(observer->testBEGIN_STEP, ==, true);
+  TEST_COMPARE(observer->testBEFORE_EXPLICIT_EVAL, ==, true);
+  TEST_COMPARE(observer->testBEFORE_X_UPDATE, ==, true);
+  TEST_COMPARE(observer->testBEFORE_XDOT_UPDATE, ==, true);
+  TEST_COMPARE(observer->testEND_STEP, ==, true);
+
   // Testing that values can be observed through the observer.                                                             
   auto x = solutionHistory->getCurrentState()->getX();
-  TEST_FLOATING_EQUALITY(observer->testCurrentValue, get_ele(*(x), 0), 1.0e-15);
+  TEST_FLOATING_EQUALITY(observer->testCurrentXValue, get_ele(*(x), 0), 1.0e-15);
   x = solutionHistory->getWorkingState()->getX();
-  TEST_FLOATING_EQUALITY(observer->testWorkingValue, get_ele(*(x), 0), 1.0e-15);
+  TEST_FLOATING_EQUALITY(observer->testWorkingXValue, get_ele(*(x), 0), 1.0e-15);
   TEST_FLOATING_EQUALITY(observer->testDt, dt, 1.0e-15);
 
   TEST_COMPARE(observer->testType, ==, "Leapfrog");
+  auto xdot = solutionHistory->getWorkingState()->getXDot();
+  TEST_FLOATING_EQUALITY(observer->testWorkingXDotValue, get_ele(*(xdot), 0), 1.0e-15);
 }
 
 
