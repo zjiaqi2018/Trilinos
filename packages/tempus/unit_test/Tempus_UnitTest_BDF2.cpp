@@ -167,9 +167,9 @@ public:
                                  "Error - unknown action location.\n");
     }
   } 
-  bool testBEGIN_STEP;
   bool testBEFORE_SOLVE;
   bool testAFTER_SOLVE;
+  bool testBEGIN_STEP;
   bool testEND_STEP;
   double testCurrentValue;
   double testWorkingValue;
