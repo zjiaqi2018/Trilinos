@@ -13,7 +13,6 @@
 #include "Tempus_StepperExplicit.hpp"
 #ifndef TEMPUS_HIDE_DEPRECATED_CODE
   #include "Tempus_StepperLeapfrogObserver.hpp"
-  #include "Tempus_StepperObserverComposite.hpp"
 #endif
 #include "Tempus_StepperLeapfrogAppAction.hpp"
 #include "Tempus_StepperLeapfrogAppActionComposite.hpp"
