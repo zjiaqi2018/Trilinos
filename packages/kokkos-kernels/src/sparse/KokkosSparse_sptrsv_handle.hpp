@@ -2,10 +2,11 @@
 //@HEADER
 // ************************************************************************
 //
-//               KokkosKernels 0.9: Linear Algebra and Graph Kernels
-//                 Copyright 2017 Sandia Corporation
+//                        Kokkos v. 3.0
+//       Copyright (2020) National Technology & Engineering
+//               Solutions of Sandia, LLC (NTESS).
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
+// Under the terms of Contract DE-NA0003525 with NTESS,
 // the U.S. Government retains certain rights in this software.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +24,10 @@
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 // IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL NTESS OR THE
 // CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
 // EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
 // PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
@@ -57,15 +58,9 @@
 #define KOKKOSKERNELS_SPTRSV_CUDAGRAPHSUPPORT
 #endif
 
-#if defined(KOKKOSKERNELS_ENABLE_TPL_CBLAS)   && \
-    defined(KOKKOSKERNELS_ENABLE_TPL_LAPACKE) && \
-   (defined(KOKKOSKERNELS_ENABLE_TPL_SUPERLU) || \
-    defined(KOKKOSKERNELS_ENABLE_TPL_CHOLMOD))
-
  // Enable supernodal sptrsv
- #define KOKKOSKERNELS_ENABLE_SUPERNODAL_SPTRSV
- #include <KokkosSparse_CrsMatrix.hpp>
-
+#ifdef KOKKOSKERNELS_ENABLE_SUPERNODAL_SPTRSV
+#include <KokkosSparse_CrsMatrix.hpp>
 #endif
 
 namespace KokkosSparse {
@@ -115,6 +110,7 @@ public:
   // entries type (managed memory)
   typedef typename Kokkos::View<nnz_lno_t *, HandleTempMemorySpace> nnz_lno_view_temp_t;
   typedef typename Kokkos::View<nnz_lno_t *, HandlePersistentMemorySpace> nnz_lno_view_t;
+  typedef typename Kokkos::View<nnz_lno_t *, Kokkos::HostSpace> hostspace_nnz_lno_view_t;
   typedef typename nnz_lno_view_t::HostMirror host_nnz_lno_view_t;
   typedef typename Kokkos::View<const nnz_lno_t *, HandlePersistentMemorySpace, Kokkos::MemoryTraits<Kokkos::Unmanaged|Kokkos::RandomAccess>> nnz_lno_unmanaged_view_t; // for rank1 subviews
  // typedef typename nnz_lno_persistent_work_view_t::HostMirror nnz_lno_persistent_work_host_view_t; //Host view type
@@ -254,9 +250,9 @@ private:
   // Symbolic: Level scheduling data
   signed_nnz_lno_view_t level_list;
   nnz_lno_view_t nodes_per_level;
-  host_nnz_lno_view_t hnodes_per_level; // NEW
+  hostspace_nnz_lno_view_t hnodes_per_level; // NEW
   nnz_lno_view_t nodes_grouped_by_level;
-  host_nnz_lno_view_t hnodes_grouped_by_level; // NEW
+  hostspace_nnz_lno_view_t hnodes_grouped_by_level; // NEW
   size_type nlevel;
 
   int team_size;
@@ -727,10 +723,14 @@ public:
       set_num_levels(0);
       level_list = signed_nnz_lno_view_t(Kokkos::ViewAllocateWithoutInitializing("level_list"), nrows_);
       Kokkos::deep_copy( level_list, signed_integral_t(-1) );
-      nodes_per_level =  nnz_lno_view_t("nodes_per_level", nrows_);
-      hnodes_per_level = Kokkos::create_mirror_view(nodes_per_level);
-      nodes_grouped_by_level = nnz_lno_view_t("nodes_grouped_by_level", nrows_);
-      hnodes_grouped_by_level = Kokkos::create_mirror_view(nodes_grouped_by_level);
+      //The host side views need to be initialized, but the device-side views don't.
+      //Symbolic computes on the host (and requires these are 0 initialized), and then copies to device.
+      hnodes_per_level = hostspace_nnz_lno_view_t("host nodes_per_level", nrows_);
+      hnodes_grouped_by_level = hostspace_nnz_lno_view_t("host nodes_grouped_by_level", nrows_);
+      nodes_per_level =  nnz_lno_view_t(
+          Kokkos::ViewAllocateWithoutInitializing("nodes_per_level"), nrows_);
+      nodes_grouped_by_level = nnz_lno_view_t(
+          Kokkos::ViewAllocateWithoutInitializing("nodes_grouped_by_level"), nrows_);
 
 #if 0
       std::cout << "  newinit_handle: level schedule allocs" << std::endl;
@@ -868,7 +868,7 @@ public:
   nnz_lno_view_t get_nodes_per_level() const { return nodes_per_level; }
 
   inline
-  host_nnz_lno_view_t get_host_nodes_per_level() const { 
+  hostspace_nnz_lno_view_t get_host_nodes_per_level() const { 
     return hnodes_per_level; 
   }
 
@@ -876,7 +876,7 @@ public:
   nnz_lno_view_t get_nodes_grouped_by_level() const { return nodes_grouped_by_level; }
 
   inline
-  host_nnz_lno_view_t get_host_nodes_grouped_by_level() const { return hnodes_grouped_by_level; }
+  hostspace_nnz_lno_view_t get_host_nodes_grouped_by_level() const { return hnodes_grouped_by_level; }
 
   KOKKOS_INLINE_FUNCTION
   size_type get_nrows() const { return nrows; }

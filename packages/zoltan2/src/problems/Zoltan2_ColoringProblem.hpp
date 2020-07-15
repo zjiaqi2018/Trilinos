@@ -135,7 +135,7 @@ public:
   {
     RCP<Teuchos::StringValidator> color_method_Validator = Teuchos::rcp(
       new Teuchos::StringValidator(
-        Teuchos::tuple<std::string>( "SerialGreedy","Hybrid","2GL" )));
+        Teuchos::tuple<std::string>( "SerialGreedy","Hybrid","2GL","D2" )));
     pl.set("color_method", "SerialGreedy", "coloring algorithm",
      color_method_Validator);
     pl.set("Hybrid_batch_size",-1,"Batch size for distributed coloring, default is all verts",
@@ -214,17 +214,21 @@ void ColoringProblem<Adapter>::solve(bool newData)
   {
       //new stuff using Kokkos and Gebremedhin-Manne-Boman framework for hybrid architectures
       //this->inputAdapter_ is the adapter passed to this problem
-      printf("Do the hybrid algorithm\n"); 
       AlgHybridGMB<Adapter> alg(this->inputAdapter_, this->params_,
                                 this->env_, this->comm_);
       alg.color(this->solution_);
   } 
   else if (method.compare("2GL") == 0)
   {
-      printf("Do the two layer ghost method\n");
       AlgDistance1TwoGhostLayer<Adapter> alg(this->inputAdapter_, this->params_,
                                              this->env_, this->comm_);
       alg.color(this->solution_);  
+  } else if (method.compare("D2") == 0)
+  {   
+      std::cout<<"Doing distance 2 coloring\n";
+      AlgDistance2<Adapter> alg(this->inputAdapter_, this->params_,
+                                this->env_, this->comm_);
+      alg.color(this->solution_);
   }
 #if 0 // TODO later
   else if (method.compare("speculative") == 0) // Gebremedhin-Manne
@@ -277,12 +281,13 @@ void ColoringProblem<Adapter>::createColoringProblem()
   case GraphModelType:
     graphFlags.set(REMOVE_SELF_EDGES);
     graphFlags.set(BUILD_LOCAL_GRAPH);
+    std::cout<<this->comm_->getRank()<<": creating graphModel\n";
     this->graphModel_ = rcp(new GraphModel<base_adapter_t>(
       this->baseInputAdapter_, this->envConst_, this->comm_, graphFlags));
-
+    std::cout<<this->comm_->getRank()<<": done creating, assigning to baseModel\n";
     this->baseModel_ = rcp_implicit_cast<const Model<base_adapter_t> >(
       this->graphModel_);
-
+    std::cout<<this->comm_->getRank()<<": done assigning, done creating coloring problem\n";
     break;
 
 

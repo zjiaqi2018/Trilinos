@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <queue>
+#include <sys/time.h>
 
 #include "Zoltan2_Algorithm.hpp"
 #include "Zoltan2_GraphModel.hpp"
@@ -47,6 +48,11 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
     using device_type = Tpetra::Map<>::device_type;
     using execution_space = Tpetra::Map<>::execution_space;
     using memory_space = Tpetra::Map<>::memory_space;
+    double timer(){
+      struct timeval tp;
+      gettimeofday(&tp, NULL);
+      return ((double) (tp.tv_sec) + 1e-6 * tp.tv_usec);
+    }
   private:
     
     void buildModel(modelFlag_t &flags);
@@ -150,6 +156,142 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
       Teuchos::ArrayView<int> recvDegreesCount_view = Teuchos::arrayViewFromVector(recvDegreesCount);
       Zoltan2::AlltoAllv<offset_t>(*comm, *env, sendDegrees_view, recvcounts_view, recvDegrees, recvDegreesCount_view);
      
+      //calculate number of rounds of AlltoAllv's that are necessary on this process
+      int rounds = 1;
+      for(int i = 0; i < comm->getSize(); i++){
+        if(adjsendcounts[i]*sizeof(gno_t)/ INT_MAX > rounds){
+          rounds = (adjsendcounts[i]*sizeof(gno_t)/INT_MAX)+1;
+        }
+      }
+
+      //see what the max number of rounds will be globally
+      int max_rounds = 0;
+      Teuchos::reduceAll<int>(*comm, Teuchos::REDUCE_MAX, 1, &rounds, &max_rounds);
+      
+      uint64_t** per_proc_round_adj_sums = new uint64_t*[max_rounds+1];
+      uint64_t** per_proc_round_vtx_sums = new uint64_t*[max_rounds+1];
+      for(int i = 0; i < max_rounds; i++){
+        per_proc_round_adj_sums[i] = new uint64_t[comm->getSize()];
+        per_proc_round_vtx_sums[i] = new uint64_t[comm->getSize()];
+        for(int j = 0; j < comm->getSize(); j++){
+          per_proc_round_adj_sums[i][j] = 0;
+          per_proc_round_vtx_sums[i][j] = 0;
+        }
+      }
+
+      for(int proc_to_send = 0; proc_to_send < comm->getSize(); proc_to_send++){
+        int curr_round = 0;
+        for(int j = sdispls[proc_to_send]; j < sdispls[proc_to_send+1]; j++){
+          if((per_proc_round_adj_sums[curr_round][proc_to_send] + recvDegrees[j])*sizeof(gno_t) > INT_MAX){
+            curr_round++;
+          }
+          per_proc_round_adj_sums[curr_round][proc_to_send] += recvDegrees[j];
+          per_proc_round_vtx_sums[curr_round][proc_to_send]++;
+        }
+      }
+      
+      gno_t*** recv_GID_per_proc_per_round = new gno_t**[max_rounds+1];
+      for(int i = 0; i < max_rounds; i++){
+        recv_GID_per_proc_per_round[i] = new gno_t*[comm->getSize()];
+        for(int j = 0; j < comm->getSize(); j++){
+          recv_GID_per_proc_per_round[i][j] = new gno_t[sendcounts[j]];
+          for(int k = 0; k < sendcounts[j]; k++){
+            recv_GID_per_proc_per_round[i][j][k] = 0;
+          }
+        }
+      }
+
+      for(int i = 0; i < comm->getSize(); i++){
+        int curr_round = 0;
+        int curr_idx = 0;
+        for(int j = sdispls[i]; j < sdispls[i+1]; j++){
+          if(curr_idx > per_proc_round_vtx_sums[curr_round][i]){
+            curr_round++;
+            curr_idx = 0;
+          }
+          recv_GID_per_proc_per_round[curr_round][i][curr_idx++] = j;
+        }
+      }
+      
+      std::vector<gno_t> final_gid_vec(sendcount, 0);
+      std::vector<offset_t> final_degree_vec(sendcount,0);
+      gno_t reorder_idx = 0;
+      for(int i = 0; i < max_rounds; i++){
+        for(int j = 0; j < comm->getSize(); j++){
+          for(int k = 0; k < per_proc_round_vtx_sums[i][j]; k++){
+            final_gid_vec[reorder_idx] = sendbuf[recv_GID_per_proc_per_round[i][j][k]];
+            final_degree_vec[reorder_idx++] = recvDegrees[recv_GID_per_proc_per_round[i][j][k]];
+          }
+        }
+      }
+      bool reorganized = false;
+      for(int i = 0; i < sendcount; i++){
+        if(final_gid_vec[i] != sendbuf[i]) reorganized = true;
+      }
+      if(!reorganized && (max_rounds > 1)) std::cout<<comm->getRank()<<": did not reorgainze GIDs, but probably should have\n";
+      if(reorganized && (max_rounds == 1)) std::cout<<comm->getRank()<<": reorganized GIDs, but probably should not have\n";
+
+      //remap the GIDs so we receive the adjacencies in the same order as the current processes LIDs
+      for (gno_t i = 0; i < sendcount; i++){
+        ownedPlusGhosts[i+offsets.size()-1] = final_gid_vec[i];
+      }
+      std::cout<<comm->getRank()<<": done remapping\n";
+
+      std::vector<offset_t> ghost_offsets(sendcount+1,0);
+      std::vector<lno_t> send_adjs(adj_len,0);
+      for(int i = 1; i < sendcount+1; i++){
+        ghost_offsets[i] = ghost_offsets[i-1] + final_degree_vec[i-1];
+      }
+
+      offset_t adjidx = 0;
+      for(int i = 0; i < recvcounttotal; i++){
+        lno_t lid = mapOwned->getLocalElement(recvbuf[i]);
+        for(offset_t j = offsets[lid]; j < offsets[lid+1]; j++){
+          send_adjs[adjidx++] = adjs[j];
+        }
+      }
+
+      offset_t recvadjscount = 0;
+      for(int i = 0; i < recvDegrees.size(); i++){
+        recvadjscount += final_degree_vec[i];
+      }
+      uint64_t* curr_idx_per_proc = new uint64_t[comm->getSize()];
+      for(int i = 0; i < comm->getSize(); i++) curr_idx_per_proc[i] = rdispls[i];
+      for(int round = 0; round < max_rounds; round++){
+        std::vector<gno_t> send_adj;
+        std::vector<int> send_adj_counts(comm->getSize(),0);
+        for(int curr_proc = 0; curr_proc < comm->getSize(); curr_proc++){
+          uint64_t curr_adj_sum = 0;
+          while( curr_idx_per_proc[curr_proc] < rdispls[curr_proc+1]){
+            lno_t lid = mapOwned->getLocalElement(recvbuf[curr_idx_per_proc[curr_proc]++]);
+            if((curr_adj_sum + (offsets[lid+1]-offsets[lid]))*sizeof(gno_t) >= INT_MAX){
+              break;
+            }
+            curr_adj_sum += (offsets[lid+1] - offsets[lid]);
+            for(offset_t j = offsets[lid]; j < offsets[lid+1]; j++){
+              send_adj.push_back(adjs[j]);
+            }
+          }
+          send_adj_counts[curr_proc] = curr_adj_sum;
+        }
+        Teuchos::ArrayView<gno_t> send_adjs_view = Teuchos::arrayViewFromVector(send_adj);
+        Teuchos::ArrayView<int> adjsendcounts_view = Teuchos::arrayViewFromVector(send_adj_counts);
+        Teuchos::ArrayRCP<gno_t> ghost_adjs;
+        uint64_t recv_adjs_count = 0;
+        for(int i = 0; i < comm->getSize(); i++){
+          recv_adjs_count += per_proc_round_adj_sums[round][i];
+        }
+        std::vector<int> adjrecvcounts(comm->getSize(),0);
+        Teuchos::ArrayView<int> adjsrecvcounts_view = Teuchos::arrayViewFromVector(adjrecvcounts);
+        Zoltan2::AlltoAllv<gno_t>(*comm, *env, send_adjs_view, adjsendcounts_view, ghost_adjs, adjsrecvcounts_view);
+        for(offset_t i = 0; i< ghost_adjs.size(); i++){
+          adjs_2GL.push_back(ghost_adjs[i]);
+        }
+      }
+      for(int i = 0; i < sendcount+1; i++){
+        offsets_2GL.push_back(ghost_offsets[i]);
+      }
+      /*
       //construct offsets with the received vertex degrees
       std::vector<offset_t> ghost_offsets(sendcount+1,0);
       std::vector<lno_t> send_adjs(adj_len,0);
@@ -186,8 +328,78 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
       for(int i = 0; i < sendcount+1; i++){
         offsets_2GL.push_back(ghost_offsets[i]);
       }
+      */
     }
     
+    double doOwnedToGhosts(RCP<const map_t> mapOwnedPlusGhosts,
+                           size_t nVtx,
+                           ArrayView<int> owners,
+                           Kokkos::View<int*, device_type>& colors){
+      int nprocs = comm->getSize();
+      int* sendcnts = new int[nprocs];
+      int* recvcnts = new int[nprocs];
+      for(int i = 0; i < nprocs; i++){
+        sendcnts[i] = 0;
+        recvcnts[i] = 0;
+      }
+      //loop through owners, count how many vertices we'll send to each processor
+      for(size_t i=0; i < owners.size(); i++){
+        if(owners[i] != comm->getRank() && owners[i] != -1) sendcnts[owners[i]]++;
+      }
+      int status = MPI_Alltoall(sendcnts,1,MPI_INT,recvcnts,1,MPI_INT,MPI_COMM_WORLD);
+
+      int* sdispls = new int[nprocs];
+      int* rdispls = new int[nprocs];
+      //construct sdispls (for building sendbuf), and sum the total sendcount
+      sdispls[0] = 0;
+      rdispls[0] = 0;
+      gno_t sendsize = 0;
+      gno_t recvsize = 0;
+      int* sentcount = new int[nprocs];
+      for(int i = 1; i < comm->getSize()+1; i++){
+        sdispls[i] = sdispls[i-1] + sendcnts[i-1];
+        rdispls[i] = rdispls[i-1] + recvcnts[i-1];
+        sendsize += sendcnts[i-1];
+        recvsize += recvcnts[i-1];
+        sentcount[i-1] = 0;
+        //std::cout<<comm->getRank()<<": sending "<<sendcounts[i-1]<<" GIDs to proc "<<i-1<<"\n";
+      }
+      int* sendbuf = new int[sendsize];
+      int* recvbuf = new int[recvsize];
+
+      for(size_t i = 0; i < owners.size(); i++){
+        if(owners[i] != comm->getRank() && owners[i] != -1){
+          int idx = sdispls[owners[i]] + sentcount[owners[i]]++;
+          sendbuf[idx] = mapOwnedPlusGhosts->getGlobalElement(i+nVtx);
+        }
+      }
+
+      double comm_total = 0.0;
+      double comm_temp = timer();
+      status = MPI_Alltoallv(sendbuf, sendcnts, sdispls, MPI_INT, recvbuf,recvcnts,rdispls,MPI_INT,MPI_COMM_WORLD);
+      comm_total += timer() - comm_temp;
+
+      int* recvColors = new int[sendsize];
+
+      for(int i = 0; i < comm->getSize(); i++){
+        for(int j = rdispls[i]; j < rdispls[i+1]; j++){
+          lno_t lid = mapOwnedPlusGhosts->getLocalElement(recvbuf[j]);
+          recvbuf[j] = colors(lid);
+        }
+      }
+
+      comm_temp = timer();
+      status = MPI_Alltoallv(recvbuf, recvcnts,rdispls,MPI_INT, recvColors, sendcnts, sdispls,MPI_INT,MPI_COMM_WORLD);
+      comm_total += timer() - comm_temp;
+
+      for(int i = 0; i < sendsize; i++){
+        colors(mapOwnedPlusGhosts->getLocalElement(sendbuf[i])) = recvColors[i];
+        //std::cout<<comm->getRank()<<": global vert "<<sendbuf[i]<<" is now color  "<<recvColors[i]<<"\n";
+      }
+      return comm_total;
+
+    }   
+
     //Main entry point for graph coloring
     void color( const RCP<ColoringSolution<Adapter> > &solution){
       //convert from global graph to local graph
@@ -288,13 +500,19 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
       }
 
       
+      std::vector<int> ghostOwners2(ownedPlusGhosts.size() -nVtx);
+      std::vector<gno_t> ghosts2(ownedPlusGhosts.size() - nVtx);
+      for(int i = nVtx; i < ownedPlusGhosts.size(); i++) ghosts2[i-nVtx] = ownedPlusGhosts[i];
+      Teuchos::ArrayView<int> owners2 = Teuchos::arrayViewFromVector(ghostOwners2);
+      Teuchos::ArrayView<const gno_t> ghostGIDs = Teuchos::arrayViewFromVector(ghosts2);
+      Tpetra::LookupStatus ls2 = mapOwned->getRemoteIndexList(ghostGIDs,owners);
 
       Teuchos::ArrayView<const lno_t> local_adjs_view = Teuchos::arrayViewFromVector(local_adjs);
       Teuchos::ArrayView<const offset_t> ghost_offsets = Teuchos::arrayViewFromVector(first_layer_ghost_offsets);
       Teuchos::ArrayView<const lno_t> ghost_adjacencies = Teuchos::arrayViewFromVector(local_ghost_adjs);
       //call the coloring algorithm
       twoGhostLayer(nVtx, nVtx+nGhosts, local_adjs_view, offsets, ghost_adjacencies, ghost_offsets,
-                    femv, ownedPlusGhosts, globalToLocal, rand);
+                    femv, ownedPlusGhosts, globalToLocal, rand, owners, mapWithCopies);
       
       //copy colors to the output array
       ArrayRCP<int> colors = solution->getColorsRCP();
@@ -312,20 +530,39 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
                        const Teuchos::RCP<femv_t>& femv,
                        const std::vector<gno_t>& gids, 
                        const std::unordered_map<gno_t,lno_t>& globalToLocal,
-                       const std::vector<int>& rand){
-      
+                       const std::vector<int>& rand,
+                       ArrayView<int> owners,
+                       RCP<const map_t> mapOwnedPlusGhosts){
+      double total_time = 0.0;
+      double interior_time = 0.0;
+      double comm_time = 0.0;
+      double comp_time = 0.0;
+      double recoloring_time=0.0;
+      double conflict_detection = 0.0;
+
       Kokkos::View<offset_t*, device_type> host_offsets("Host Offset View", offsets.size());
       Kokkos::View<lno_t*, device_type> host_adjs("Host Adjacencies View", adjs.size());
       for(Teuchos_Ordinal i = 0; i < offsets.size(); i++) host_offsets(i) = offsets[i];
-      for(Teuchos_Ordinal i = 0; i < adjs.size(); i++) host_adjs(i) = adjs[i];
-
+      for(Teuchos_Ordinal i = 0; i < adjs.size(); i++) host_adjs(i) = adjs[i]; 
+      comm->barrier();
+      interior_time = timer();
       //give the entire local graph to KokkosKernels to color
       this->colorInterior(n_local, host_adjs, host_offsets, femv,false);
-
+      interior_time = timer() - interior_time;
+      total_time = interior_time;
+      comp_time = interior_time;
+      //get the color view from the FEMultiVector
+      Kokkos::View<int**, Kokkos::LayoutLeft> femvColors = femv->template getLocalView<memory_space>();
+      Kokkos::View<int*, device_type> femv_colors = subview(femvColors, Kokkos::ALL, 0);
+      comm->barrier();
       //communicate the initial coloring.
-      femv->switchActiveMultiVector();
-      femv->doOwnedToOwnedPlusShared(Tpetra::REPLACE);
-      femv->switchActiveMultiVector();
+      //femv->switchActiveMultiVector();
+      //double comm_temp = timer();
+      //femv->doOwnedToOwnedPlusShared(Tpetra::REPLACE);
+      //comm_time = timer() - comm_temp;
+      comm_time = doOwnedToGhosts(mapOwnedPlusGhosts,n_local,owners,femv_colors);
+      total_time += comm_time;
+      //femv->switchActiveMultiVector();
       
       //create the graph structures which allow KokkosKernels to recolor the conflicting vertices
       Kokkos::View<offset_t*, Tpetra::Map<>::device_type> dist_degrees("Owned+Ghost degree view",rand.size());
@@ -371,9 +608,6 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
       for(Teuchos_Ordinal i = 0; i < ghost_offsets.size(); i++) ghost_offset_view(i) = ghost_offsets[i];
       for(Teuchos_Ordinal i = 0; i < ghost_adjs.size(); i++) ghost_adjs_view(i) = ghost_adjs[i];
 
-      //get the color view from the FEMultiVector
-      Kokkos::View<int**, Kokkos::LayoutLeft> femvColors = femv->template getLocalView<memory_space>();
-      Kokkos::View<int*, device_type> femv_colors = subview(femvColors, Kokkos::ALL, 0);
 
       //create a view for the tie-breaking numbers.
       Kokkos::View<int*, device_type> rand_view("Random View", rand.size());
@@ -381,7 +615,8 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
       
       Kokkos::View<gno_t*, device_type> gid_view("GIDs", gids.size());
       for(size_t i = 0; i < gids.size(); i++) gid_view(i) = gids[i];
- 
+      comm->barrier();
+      double temp = timer();
       //detect conflicts only for ghost vertices
       Kokkos::parallel_for(ghost_offsets.size()-1, KOKKOS_LAMBDA (const int& i){
         lno_t localIdx = i + n_local;
@@ -409,12 +644,28 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
       });
       //ensure that the parallel_for finishes before continuing
       Kokkos::fence();
+      if(comm->getSize() > 1){
+        conflict_detection = timer() - temp;
+        total_time += conflict_detection;
+        comp_time += conflict_detection;
+      }
       //all conflicts detected!
 
       //variables for statistics
-      int vertsPerRound[100];
-      int distributedRounds = 0;
-      
+      double totalPerRound[100];
+      double commPerRound[100];
+      double compPerRound[100];
+      double recoloringPerRound[100];
+      double conflictDetectionPerRound[100];
+      uint64_t vertsPerRound[100];
+      int distributedRounds = 1;
+      totalPerRound[0] = interior_time + comm_time + conflict_detection;
+      recoloringPerRound[0] = 0;
+      commPerRound[0] = comm_time;
+      compPerRound[0] = interior_time + conflict_detection;
+      conflictDetectionPerRound[0] = conflict_detection;
+      recoloringPerRound[0] = 0;
+      vertsPerRound[0] = 0;
       //see if recoloring is necessary.
       gno_t totalConflicts = 0;
       gno_t localConflicts = recoloringSize(0);
@@ -424,18 +675,40 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
       
       //recolor until no conflicts are left
       while(!done){
-        if(distributedRounds < 100) vertsPerRound[distributedRounds++] = recoloringSize(0);
-       
+        if(distributedRounds < 100) {
+          int localVertsToRecolor = 0;
+          for(int i = 0; i < n_local; i++){
+            if(femv_colors(i) == 0) localVertsToRecolor++;
+          }
+          vertsPerRound[distributedRounds++] = localVertsToRecolor;
+        }
+        
+        comm->barrier();
+        double recolor_temp = timer();
         //recolor using KokkosKernels' coloring function 
         this->colorInterior(femv_colors.size(), dist_adjs, dist_offsets, femv, true);
+        recoloringPerRound[distributedRounds] = timer() - recolor_temp;
+        recoloring_time += recoloringPerRound[distributedRounds];
+        total_time += recoloringPerRound[distributedRounds];
+        comp_time += recoloringPerRound[distributedRounds];
+        compPerRound[distributedRounds] = recoloringPerRound[distributedRounds];
+        totalPerRound[distributedRounds] = recoloringPerRound[distributedRounds];
         recoloringSize(0) = 0;
         
+        comm->barrier();
         //communicate the new colors
-        femv->switchActiveMultiVector();
-        femv->doOwnedToOwnedPlusShared(Tpetra::REPLACE);
-        femv->switchActiveMultiVector();
-
+        //femv->switchActiveMultiVector();
+        //double comm_loop_temp = timer();
+        //femv->doOwnedToOwnedPlusShared(Tpetra::REPLACE);
+        //commPerRound[distributedRounds] = timer() - comm_loop_temp;
+        commPerRound[distributedRounds] = doOwnedToGhosts(mapOwnedPlusGhosts,n_local,owners,femv_colors);
+        comm_time += commPerRound[distributedRounds];
+        totalPerRound[distributedRounds] += commPerRound[distributedRounds];
+        total_time += commPerRound[distributedRounds];
+        //femv->switchActiveMultiVector();
+        comm->barrier();
         //check for further conflicts
+        double detection_temp = timer();
         Kokkos::parallel_for(ghost_offsets.size()-1, KOKKOS_LAMBDA (const int& i){
           lno_t localIdx = i + n_local;
           for(offset_t j = ghost_offset_view(i); j < ghost_offset_view(i+1); j++){
@@ -463,13 +736,95 @@ class AlgDistance1TwoGhostLayer : public Algorithm<Adapter> {
         
         //ensure the parallel_for finishes before continuing
         Kokkos::fence(); 
+        conflictDetectionPerRound[distributedRounds] = timer() - detection_temp;
+        conflict_detection += conflictDetectionPerRound[distributedRounds];
+        compPerRound[distributedRounds] += conflictDetectionPerRound[distributedRounds];
+        totalPerRound[distributedRounds] += conflictDetectionPerRound[distributedRounds];
+        total_time += conflictDetectionPerRound[distributedRounds];
+        comp_time += conflictDetectionPerRound[distributedRounds];
+
+        distributedRounds++;
         int localDone = recoloringSize(0);
         int globalDone = 0;
         Teuchos::reduceAll<int,int>(*comm, Teuchos::REDUCE_SUM, 1, &localDone, &globalDone);
         done = !globalDone;
-      
+        
       }//end coloring
+      uint64_t localBoundaryVertices = 0;
+      for(int i = 0; i < n_local; i++){
+        for(int j = offsets[i]; j < offsets[i+1]; j++){
+          if(adjs[j] >= n_local){
+            localBoundaryVertices++;
+            break;
+          }
+        }
+      }      
       
+      if(comm->getRank() == 0) printf("did %d rounds of distributed coloring\n", distributedRounds);
+      uint64_t totalVertsPerRound[100];
+      uint64_t totalBoundarySize = 0;
+      double finalTotalPerRound[100];
+      double maxRecoloringPerRound[100];
+      double minRecoloringPerRound[100];
+      double finalCommPerRound[100];
+      double finalCompPerRound[100];
+      double finalConflictDetectionPerRound[100];
+      for(int i = 0; i < 100; i++){
+        totalVertsPerRound[i] = 0;
+        finalTotalPerRound[i] = 0.0;
+        maxRecoloringPerRound[i] = 0.0;
+        minRecoloringPerRound[i] = 0.0;
+        finalCommPerRound[i] = 0.0;
+        finalCompPerRound[i] = 0.0;
+        finalConflictDetectionPerRound[i] = 0.0;
+      }
+      Teuchos::reduceAll<int,uint64_t>(*comm, Teuchos::REDUCE_SUM,1,&localBoundaryVertices, &totalBoundarySize);
+      Teuchos::reduceAll<int,uint64_t>(*comm, Teuchos::REDUCE_SUM,100,vertsPerRound,totalVertsPerRound);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,100,totalPerRound, finalTotalPerRound);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,100,recoloringPerRound,maxRecoloringPerRound);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MIN,100,recoloringPerRound,minRecoloringPerRound);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,100,commPerRound,finalCommPerRound);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,100,compPerRound,finalCompPerRound);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,100,conflictDetectionPerRound, finalConflictDetectionPerRound);
+      printf("Rank %d: boundary size: %d\n",comm->getRank(),localBoundaryVertices);
+      for(int i = 0; i < std::min((int)distributedRounds,100); i++){
+        printf("Rank %d: recolor %d vertices in round %d\n",comm->getRank(), vertsPerRound[i],i);
+        if(comm->getRank()==0){
+          printf("recolored %d vertices in round %d\n",totalVertsPerRound[i], i);
+          printf("total time in round %d: %f\n",i,finalTotalPerRound[i]);
+          printf("recoloring time in round %d: %f\n",i,maxRecoloringPerRound[i]);
+          printf("min recoloring time in round %d: %f\n",i,minRecoloringPerRound[i]);
+          printf("conflict detection time in round %d: %f\n",i,finalConflictDetectionPerRound[i]);
+          printf("comm time in round %d: %f\n",i,finalCommPerRound[i]);
+          printf("comp time in round %d: %f\n",i,finalCompPerRound[i]);
+        }
+      }
+      double global_total_time = 0.0;
+      double global_recoloring_time = 0.0;
+      double global_min_recoloring_time = 0.0;
+      double global_conflict_detection=0.0;
+      double global_comm_time=0.0;
+      double global_comp_time=0.0;
+      double global_interior_time=0.0;
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,1,&total_time,&global_total_time);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,1,&recoloring_time,&global_recoloring_time);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MIN,1,&recoloring_time,&global_min_recoloring_time);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,1,&conflict_detection,&global_conflict_detection);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,1,&comm_time,&global_comm_time);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,1,&comp_time,&global_comp_time);
+      Teuchos::reduceAll<int,double>(*comm, Teuchos::REDUCE_MAX,1,&interior_time,&global_interior_time);
+      comm->barrier();
+      fflush(stdout);
+      if(comm->getRank()==0){
+        printf("Boundary size: %d\n",totalBoundarySize);
+        printf("Total Time: %f\n",global_total_time);
+        printf("Interior Time: %f\n",global_interior_time);
+        printf("Recoloring Time: %f\n",global_recoloring_time);
+        printf("Min Recoloring Time: %f\n",global_min_recoloring_time);
+        printf("Conflict Detection Time: %f\n",global_conflict_detection);
+        printf("Comm Time: %f\n",global_comm_time);
+        printf("Comp Time: %f\n",global_comp_time);
+      }
       /*RESULT REPORTING INSTRUMENTATION
       if(comm->getRank()==0) printf("did %d rounds of distributed coloring\n",distributedRounds);
       int totalVertsPerRound[100];
@@ -496,16 +851,16 @@ void AlgDistance1TwoGhostLayer<Adapter>::colorInterior(const size_t nVtx,
                        Kokkos::View<lno_t*,device_type> adjs_view,
                        Kokkos::View<offset_t*, device_type> offset_view,
                        Teuchos::RCP<femv_t> femv,
-                       bool recolor=false) {
+                       bool recolor) {
   using KernelHandle = KokkosKernels::Experimental::KokkosKernelsHandle
       <size_t, lno_t, lno_t, execution_space, memory_space, memory_space>;
   KernelHandle kh;
   
-  if(recolor){
-    kh.create_graph_coloring_handle(KokkosGraph::COLORING_VBBIT);
-  } else {
-    kh.create_graph_coloring_handle(KokkosGraph::COLORING_DEFAULT);
-  }
+  //if(recolor){
+  //  kh.create_graph_coloring_handle(KokkosGraph::COLORING_VBBIT);
+  //} else {
+  kh.create_graph_coloring_handle(KokkosGraph::COLORING_DEFAULT);
+  //}
   Kokkos::View<int**, Kokkos::LayoutLeft> femvColors = femv->template getLocalView<memory_space>();
   Kokkos::View<int*, device_type> sv = subview(femvColors, Kokkos::ALL, 0);
   kh.get_graph_coloring_handle()->set_vertex_colors(sv);

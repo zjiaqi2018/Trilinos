@@ -120,7 +120,7 @@ public:
 
   /*! PuLP constructors
    *  \param env          parameters for the problem and library configuration
-   *  \param problemComm  the communicator for the problem
+   *  \param problemComm  the problemCommunicator for the problem
    *  \param adapter      the user's input adapter
    * 
    *  We're building a graph model, so throw an error if we can't  
@@ -410,7 +410,7 @@ void AlgPuLP<Adapter>::partition(
   long* out_offsets = nullptr;
   TPL_Traits<int, const gno_t>::ASSIGN_ARRAY(&out_edges, adjs);
   TPL_Traits<long, const offset_t>::ASSIGN_ARRAY(&out_offsets, offsets);
-
+  printf("Creating pulp graph\n");
   pulp_graph_t g = {num_verts, num_edges, 
                     out_edges, out_offsets,
                     vertex_weights, edge_weights, vertex_weights_sum};

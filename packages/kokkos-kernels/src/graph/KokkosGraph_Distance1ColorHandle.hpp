@@ -2,10 +2,11 @@
 //@HEADER
 // ************************************************************************
 //
-//               KokkosKernels 0.9: Linear Algebra and Graph Kernels
-//                 Copyright 2017 Sandia Corporation
+//                        Kokkos v. 3.0
+//       Copyright (2020) National Technology & Engineering
+//               Solutions of Sandia, LLC (NTESS).
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
+// Under the terms of Contract DE-NA0003525 with NTESS,
 // the U.S. Government retains certain rights in this software.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +24,10 @@
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 // IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL NTESS OR THE
 // CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
 // EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
 // PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
@@ -233,7 +234,7 @@ private:
   void choose_default_algorithm()
   {
 #if defined( KOKKOS_ENABLE_SERIAL )
-    if (Kokkos::Impl::is_same< Kokkos::Serial , ExecutionSpace >::value){
+    if (std::is_same< Kokkos::Serial , ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_SERIAL;
 #ifdef VERBOSE
       std::cout << "Serial Execution Space, Default Algorithm: COLORING_VB" << std::endl;
@@ -242,7 +243,7 @@ private:
 #endif
 
 #if defined( KOKKOS_ENABLE_THREADS )
-    if (Kokkos::Impl::is_same< Kokkos::Threads , ExecutionSpace >::value){
+    if (std::is_same< Kokkos::Threads , ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_VB;
 #ifdef VERBOSE
       std::cout << "PTHREAD Execution Space, Default Algorithm: COLORING_VB" << std::endl;
@@ -251,7 +252,7 @@ private:
 #endif
 
 #if defined( KOKKOS_ENABLE_OPENMP )
-    if (Kokkos::Impl::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
+    if (std::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_VB;
 #ifdef VERBOSE
       std::cout << "OpenMP Execution Space, Default Algorithm: COLORING_VB" << std::endl;
@@ -260,7 +261,7 @@ private:
 #endif
 
 #if defined( KOKKOS_ENABLE_CUDA )
-    if (Kokkos::Impl::is_same<Kokkos::Cuda, ExecutionSpace >::value){
+    if (std::is_same<Kokkos::Cuda, ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_EB;
 #ifdef VERBOSE
       std::cout << "Cuda Execution Space, Default Algorithm: COLORING_VB" << std::endl;
@@ -269,7 +270,7 @@ private:
 #endif
 
 #if defined( KOKKOS_ENABLE_QTHREAD)
-    if (Kokkos::Impl::is_same< Kokkos::Qthread, ExecutionSpace >::value){
+    if (std::is_same< Kokkos::Qthread, ExecutionSpace >::value){
       this->coloring_algorithm_type = COLORING_VB;
 #ifdef VERBOSE
       std::cout << "Qthread Execution Space, Default Algorithm: COLORING_VB" << std::endl;
@@ -483,32 +484,38 @@ private:
       size_type  &num_out_edges,
       nnz_lno_persistent_work_view_t &src,
       nnz_lno_persistent_work_view_t &dst){
-
+    HandleExecSpace().fence();
+    Kokkos::Impl::Timer *timer = new Kokkos::Impl::Timer();
     if (size_of_edge_list > 0){
       num_out_edges = size_of_edge_list;
       //src = Kokkos::View<idx *, HandlePersistentMemorySpace> (this->lower_triangle_src);
       //dst = Kokkos::View<idx *, HandlePersistentMemorySpace> (this->lower_triangle_dst);
       src = (this->lower_triangle_src);
       dst = (this->lower_triangle_dst);
+      std::cout<<"\tSet src and dst: "<<timer->seconds()<<"\n";
+      timer->reset();
     }
     else {
-
+      
       size_type_temp_work_view_t lower_count("LowerXADJ", nv + 1);
       size_type new_num_edge = 0;
       typedef Kokkos::RangePolicy<HandleExecSpace> my_exec_space;
 
       if ( false
 #if defined( KOKKOS_ENABLE_CUDA )
-          || Kokkos::Impl::is_same<Kokkos::Cuda, ExecutionSpace >::value
+          || std::is_same<Kokkos::Cuda, ExecutionSpace >::value
 #endif
          )
       {
 
-
+        std::cout<<"\tExecuting on GPU #verts = "<<nv<<" #edges = "<<ne<<"\n";
         int teamSizeMax = 0;
         int vector_size = 0;
-
+        
         CountLowerTriangleTeam<row_index_view_type, nonzero_view_type, size_type_temp_work_view_t> clt (nv, xadj, adj, lower_count);
+        HandleExecSpace().fence();
+        std::cout<<"\tCountLowerTriangleTeam created: "<<timer->seconds()<<"\n";
+        timer->reset();
 #ifdef KOKKOS_ENABLE_DEPRECATED_CODE
         int max_allowed_team_size = team_policy_t::team_size_max(clt);
         KokkosKernels::Impl::get_suggested_vector_team_size<size_type, HandleExecSpace>(
@@ -516,26 +523,40 @@ private:
             vector_size,
             teamSizeMax,
             nv, ne);
+        HandleExecSpace().fence();
+        std::cout<<"\tGot deprecated vector("<<vector_size<<"), vector team("<<teamSizeMax<<"), and max_allowed_team_size("<<max_allowed_team_size<<") sizes: "<<timer->seconds()<<"\n";
+        timer->reset();
 #else
         KokkosKernels::Impl::get_suggested_vector_size<size_type, HandleExecSpace>(
             vector_size,
             nv, ne);
 
         teamSizeMax = KokkosKernels::Impl::get_suggested_team_size<team_policy_t>(clt, vector_size);
+        HandleExecSpace().fence();
+        std::cout<<"\tGot regular vector("<<vector_size<<") and vector team("<<teamSizeMax<<") sizes: "<<timer->seconds()<<"\n";
+        timer->reset();
 #endif
-
+     
         Kokkos::parallel_for("KokkosGraph::CountLowerTriangleTeam",
             team_policy_t((nv + teamSizeMax - 1) / teamSizeMax, teamSizeMax, vector_size),
             clt//, new_num_edge
         );
+        HandleExecSpace().fence();
+        std::cout<<"\tKernel CountLowerTriangleTeam: "<<timer->seconds()<<"\n";
+        timer->reset();
 
         KokkosKernels::Impl::inclusive_parallel_prefix_sum<size_type_temp_work_view_t, HandleExecSpace>
         (nv+1, lower_count);
         //Kokkos::parallel_scan (my_exec_space(0, nv + 1), PPS<row_lno_temp_work_view_t>(lower_count));
         HandleExecSpace().fence();
+        std::cout<<"\tinclusive_parallel_prefix_sum: "<<timer->seconds()<<"\n";
+        timer->reset();
         auto lower_total_count = Kokkos::subview(lower_count, nv);
         auto hlower = Kokkos::create_mirror_view (lower_total_count);
         Kokkos::deep_copy (hlower, lower_total_count);
+        HandleExecSpace().fence();
+        std::cout<<"\tCopy from device to hlower: "<<timer->seconds()<<"\n";
+        timer->reset();
 
         new_num_edge = hlower();
         nnz_lno_persistent_work_view_t half_src (Kokkos::ViewAllocateWithoutInitializing("HALF SRC"),new_num_edge);
@@ -545,31 +566,43 @@ private:
             FillLowerTriangleTeam
             <row_index_view_type, nonzero_view_type,
            size_type_temp_work_view_t,nnz_lno_persistent_work_view_t> (nv, xadj, adj, lower_count, half_src, half_dst));
-
+        HandleExecSpace().fence();
+        std::cout<<"\tKernel FillLowerTriangleTeam: "<<timer->seconds()<<"\n";
+        timer->reset();
         src = lower_triangle_src = half_src;
         dst = lower_triangle_dst = half_dst;
         num_out_edges = size_of_edge_list = new_num_edge;
+        HandleExecSpace().fence();
+        std::cout<<"\tfinal assignments: "<<timer->seconds()<<"\n";
+        timer->reset();
       }
       else {
+        std::cout<<"\tNot executing on GPU\n";
         if (nv > 0) {
           Kokkos::parallel_reduce("KokkosGraph::CountLowerTriangleTeam",my_exec_space(0,nv),
               CountLowerTriangle<row_index_view_type, nonzero_view_type, size_type_temp_work_view_t> (nv, xadj, adj, lower_count), new_num_edge);
         }
-
+        std::cout<<"\tKernel CountLowerTriangleTeam: "<<timer->seconds()<<"\n";
+        timer->reset();
         //Kokkos::parallel_scan (my_exec_space(0, nv + 1), PPS<row_lno_temp_work_view_t>(lower_count));
-
+        
         KokkosKernels::Impl::inclusive_parallel_prefix_sum<size_type_temp_work_view_t, HandleExecSpace>
         (nv+1, lower_count);
+        std::cout<<"\tinclusive_parallel_prefix_sum: "<<timer->seconds()<<"\n";
+        timer->reset();
         nnz_lno_persistent_work_view_t half_src (Kokkos::ViewAllocateWithoutInitializing("HALF SRC"),new_num_edge);
         nnz_lno_persistent_work_view_t half_dst (Kokkos::ViewAllocateWithoutInitializing("HALF DST"),new_num_edge);
 
         Kokkos::parallel_for("KokkosGraph::FillLowerTriangleTeam",my_exec_space(0,nv), FillLowerTriangle
             <row_index_view_type, nonzero_view_type,
             size_type_temp_work_view_t,nnz_lno_persistent_work_view_t> (nv, xadj, adj, lower_count, half_src, half_dst));
-
+        std::cout<<"\tKernel FillLowerTriangleTeam: "<<timer->seconds()<<"\n";
+        timer->reset();
         src = lower_triangle_src = half_src;
         dst = lower_triangle_dst = half_dst;
         num_out_edges = size_of_edge_list = new_num_edge;
+        std::cout<<"\tfinal assignments: "<<timer->seconds()<<"\n";
+        timer->reset();
       }
     }
   }

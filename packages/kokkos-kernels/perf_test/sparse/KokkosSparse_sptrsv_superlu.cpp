@@ -2,10 +2,11 @@
 //@HEADER
 // ************************************************************************
 //
-//               KokkosKernels 0.9: Linear Algebra and Graph Kernels
-//                 Copyright 2017 Sandia Corporation
+//                        Kokkos v. 3.0
+//       Copyright (2020) National Technology & Engineering
+//               Solutions of Sandia, LLC (NTESS).
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
+// Under the terms of Contract DE-NA0003525 with NTESS,
 // the U.S. Government retains certain rights in this software.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +24,10 @@
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 // IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL NTESS OR THE
 // CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
 // EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
 // PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
@@ -48,7 +49,8 @@
 
 #if defined( KOKKOS_ENABLE_CXX11_DISPATCH_LAMBDA )         && \
   (!defined(KOKKOS_ENABLE_CUDA) || (8000 <= CUDA_VERSION)) && \
-    defined(KOKKOSKERNELS_INST_DOUBLE)
+    defined(KOKKOSKERNELS_INST_DOUBLE) || \
+    defined(KOKKOSKERNELS_INST_COMPLEX_DOUBLE)
 
 #if defined(KOKKOSKERNELS_ENABLE_TPL_SUPERLU) && \
     defined(KOKKOSKERNELS_ENABLE_SUPERNODAL_SPTRSV)
@@ -100,7 +102,7 @@ void print_factor_superlu(int n, SuperMatrix *L, SuperMatrix *U, int *perm_r, in
   }
   printf( "];\n" );
 
-#if 0
+#if defined(KOKKOSKERNELS_ENABLE_TPL_SUPERLU)
   using STS = Kokkos::Details::ArithTraits<scalar_type>;
 
   int *colptr = Lstore->nzval_colptr;
@@ -358,7 +360,7 @@ void free_superlu (SuperMatrix &L, SuperMatrix &U,
 
 /* ========================================================================================= */
 template<typename scalar_type>
-int test_sptrsv_perf (std::vector<int> tests, bool verbose, std::string& filename, bool symm_mode, bool metis, bool merge,
+int test_sptrsv_perf (std::vector<int> tests, bool verbose, std::string &filename, bool symm_mode, bool metis, bool merge,
                       bool invert_offdiag, bool u_in_csr, int panel_size, int relax_size, int loop) {
 
   using ordinal_type = int;
@@ -697,6 +699,7 @@ void print_help_sptrsv() {
 int main(int argc, char **argv) {
   std::vector<int> tests;
   std::string filename;
+  std::string scalarTypeString;
 
   int loop = 1;
   // use symmetric mode for SuperLU
@@ -726,21 +729,19 @@ int main(int argc, char **argv) {
       i++;
       if((strcmp(argv[i],"superlu-naive")==0)) {
         tests.push_back( SUPERNODAL_NAIVE );
-      }
-      if((strcmp(argv[i],"superlu-etree")==0)) {
+      } else if((strcmp(argv[i],"superlu-etree")==0)) {
         tests.push_back( SUPERNODAL_ETREE );
-      }
-      if((strcmp(argv[i],"superlu-dag")==0)) {
+      } else if((strcmp(argv[i],"superlu-dag")==0)) {
         tests.push_back( SUPERNODAL_DAG );
-      }
-      if((strcmp(argv[i],"superlu-spmv")==0)) {
+      } else if((strcmp(argv[i],"superlu-spmv")==0)) {
         tests.push_back( SUPERNODAL_SPMV );
-      }
-      if((strcmp(argv[i],"superlu-spmv-dag")==0)) {
+      } else if((strcmp(argv[i],"superlu-spmv-dag")==0)) {
         tests.push_back( SUPERNODAL_SPMV_DAG );
-      }
-      if((strcmp(argv[i],"cusparse")==0)) {
+      } else if((strcmp(argv[i],"cusparse")==0)) {
         tests.push_back( CUSPARSE );
+      } else {
+        std::cerr << "Invalid --tests option: \"" << argv[i] << "\"" << std::endl;
+        return -EINVAL;
       }
       continue;
     }
@@ -795,19 +796,33 @@ int main(int argc, char **argv) {
     std::cout << "tests[" << i << "] = " << tests[i] << std::endl;
   }
 
-  {
-    using scalar_t = double;
-    //using scalar_t = Kokkos::complex<double>;
-    Kokkos::ScopeGuard kokkosScope (argc, argv);
-    int total_errors = test_sptrsv_perf<scalar_t> (tests, verbose, filename, symm_mode, metis, merge,
-                                                   invert_offdiag, u_in_csr, panel_size, relax_size, loop);
-    if(total_errors == 0)
-      std::cout << "Kokkos::SPTRSV Test: Passed"
-                << std::endl << std::endl;
-    else
-      std::cout << "Kokkos::SPTRSV Test: Failed (" << total_errors << " / " << 2*tests.size() << " failed)"
-                << std::endl << std::endl;
-  }
+  Kokkos::ScopeGuard kokkosScope (argc, argv);
+
+  // If eti-type complex<double> is enabled at compile time, this is what
+  // the perf_test will use
+  #if defined(KOKKOSKERNELS_INST_COMPLEX_DOUBLE)
+    using scalar_t = Kokkos::complex<double>;
+    scalarTypeString = "(scalar_t = Kokkos::complex<double>)";
+  #else
+    // If eti-type double is enabled at compile time, this is what
+    // the perf_test will use
+    #if defined(KOKKOSKERNELS_INST_DOUBLE)
+      using scalar_t = double;
+      scalarTypeString = "(scalar_t = double)";
+    #else
+      #error "Invalid type specified in KOKKOSKERNELS_SCALARS, supported types are "double,complex<double>""
+    #endif
+  #endif
+  int total_errors = test_sptrsv_perf<scalar_t> (tests, verbose, filename, symm_mode, metis, merge,
+                                                  invert_offdiag, u_in_csr, panel_size, relax_size, loop);
+  if(total_errors == 0)
+    std::cout << "Kokkos::SPTRSV Test: Passed " << scalarTypeString
+              << std::endl << std::endl;
+  else
+    std::cout << "Kokkos::SPTRSV Test: Failed (" << total_errors 
+              << " / " << 2*tests.size() << " failed) " << scalarTypeString
+              << std::endl << std::endl;
+
   return 0;
 }
 #else // defined(KOKKOSKERNELS_ENABLE_TPL_SUPERLU)

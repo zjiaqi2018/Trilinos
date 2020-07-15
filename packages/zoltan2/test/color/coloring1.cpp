@@ -56,8 +56,15 @@
 #include <Zoltan2_XpetraCrsMatrixAdapter.hpp>
 #include <Zoltan2_TestHelpers.hpp>
 #include <Zoltan2_ColoringProblem.hpp>
+#include "zoltan_cpp.h"
+//#include <cuda_profiler_api.h>
+//#include "ReadMatrixFromFile.h"
+#include "dist_graph.h"
+#include "fast_map.h"
+//#include "xtrapulp.h"
+#include "io_pp.h"
+#include "repart_graph.hpp"
 
-#include "ReadMatrixFromFile.hpp"
 
 using Teuchos::RCP;
 
@@ -82,11 +89,94 @@ typedef zgno_t z2TestGO;
 typedef zscalar_t z2TestScalar;
 
 typedef Tpetra::CrsMatrix<z2TestScalar, z2TestLO, z2TestGO> SparseMatrix;
+typedef SparseMatrix::crs_graph_type CrsGraph;
+typedef CrsGraph::map_type map_t;
+typedef typename CrsGraph::local_graph_type::row_map_type row_map_t;
+typedef typename CrsGraph::local_graph_type::entries_type::non_const_type entries_t;
 typedef Tpetra::Vector<z2TestScalar, z2TestLO, z2TestGO> Vector;
 typedef Vector::node_type Node;
 typedef Tpetra::Import<z2TestLO, z2TestGO> Import;
 
 typedef Zoltan2::XpetraCrsMatrixAdapter<SparseMatrix> SparseMatrixAdapter;
+typedef SparseMatrixAdapter::part_t part_t;
+
+extern "C" static int get_num_elements(void *data, int *ierr){
+  color_dist_graph_t* dist_graph;
+
+  if(data == NULL){
+    *ierr = ZOLTAN_FATAL;
+    return 0;
+  }
+
+  *ierr = ZOLTAN_OK;
+  dist_graph = (color_dist_graph_t*) data;
+  return dist_graph->n_local;
+}
+
+extern "C" static void get_elements(void *data, int num_gid_entries, int num_lid_entries,
+                                    ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
+                                    int wdim, float *wgt, int *ierr){
+  color_dist_graph_t* dist_graph;
+  
+  if(data == NULL){
+    *ierr = ZOLTAN_FATAL;
+    return;
+  }
+
+  dist_graph = (color_dist_graph_t*) data;
+  for(int i = 0; i < dist_graph->n_local; i++){
+    global_id[i] = dist_graph->local_unmap[i];
+    local_id[i] = i;
+  }
+  *ierr = ZOLTAN_OK;
+}
+
+extern "C" static void get_num_edges_list(void *data, int num_gid_entries, int num_lid_entries,
+                                          int num_obj, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
+                                          int *numEdges, int* ierr){
+  color_dist_graph_t* dist_graph;
+  
+  if(data==NULL){
+    *ierr = ZOLTAN_FATAL;
+     return;
+  }
+  *ierr = ZOLTAN_OK;
+  dist_graph = (color_dist_graph_t*) data;
+  for(int i = 0; i < num_obj; i++){
+    numEdges[i] = dist_graph->out_offsets[local_id[i]+1] - dist_graph->out_offsets[local_id[i]];
+  }
+}
+
+extern "C" static void get_edge_list(void *data, int num_gid_entries, int num_lid_entries,
+                                     int num_obj, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
+                                     int* num_edges,
+                                     ZOLTAN_ID_PTR nbor_global_id, int *nbor_procs,
+                                     int get_ewgts, float *nbor_ewgts, int *ierr){
+  color_dist_graph_t* dist_graph;
+
+  if(data==NULL){
+    *ierr = ZOLTAN_FATAL;
+    return;
+  }
+  
+  dist_graph = (color_dist_graph_t*) data;
+  nbor_ewgts = NULL;
+  uint64_t nbor_idx = 0;
+  for(int i = 0; i < num_obj; i++){
+    uint64_t lid = local_id[i];
+    for(int j = dist_graph->out_offsets[lid]; j < dist_graph->out_offsets[lid+1]; j++){
+      uint64_t nbor_lid = dist_graph->out_edges[j];
+      if(nbor_lid < dist_graph->n_local){
+        nbor_global_id[nbor_idx] = dist_graph->local_unmap[nbor_lid];
+        nbor_procs[nbor_idx++] = procid;
+      } else {
+        nbor_global_id[nbor_idx] = dist_graph->ghost_unmap[nbor_lid - dist_graph->n_local];
+        nbor_procs[nbor_idx++] = dist_graph->ghost_tasks[nbor_lid - dist_graph->n_local];
+      }
+    }
+  }
+  *ierr = ZOLTAN_OK;
+}
 
 int validateColoring(RCP<SparseMatrix> A, int *color)
 // returns 0 if coloring is valid, nonzero if invalid
@@ -111,14 +201,14 @@ int validateColoring(RCP<SparseMatrix> A, int *color)
   return nconflicts;
 }
 
-int validateDistributedColoring(const SparseMatrix& A, int *color, int rank){
+int validateDistributedColoring(RCP<SparseMatrix> A, int *color, int rank){
   int nconflicts = 0;
   
-  RCP<const SparseMatrix::map_type> rowMap = A.getRowMap();
-  RCP<const SparseMatrix::map_type> colMap = A.getColMap();
+  RCP<const SparseMatrix::map_type> rowMap = A->getRowMap();
+  RCP<const SparseMatrix::map_type> colMap = A->getColMap();
   Vector R = Vector(rowMap);
   //put the colors in the scalar entries of R.
-  for(size_t i = 0; i < A.getNodeNumRows(); i++){
+  for(size_t i = 0; i < A->getNodeNumRows(); i++){
     R.replaceLocalValue(i,color[i]);
   }
 
@@ -131,10 +221,49 @@ int validateDistributedColoring(const SparseMatrix& A, int *color, int rank){
 
   // Count conflicts in the graph.
   // Loop over local rows, treat local column indices as edges.
-  size_t n = A.getNodeNumRows();
+  size_t n = A->getNodeNumRows();
   auto colorData = C.getData();
   for (size_t i=0; i<n; i++) {
-    A.getLocalRowView(i, indices, values);
+    A->getLocalRowView(i, indices, values);
+    for (Teuchos_Ordinal j = 0; j < indices.size(); j++) {
+      //std::cout<<"Debug: checking for conflict between vertex "<<rowMap->getGlobalElement(i)<<"(colored "<<color[i]<<") and vertex "<<colMap->getGlobalElement(indices[j])<<"(colored "<<colorData[indices[j]]<<")\n";
+      if ((indices[j] != i) && (color[i] == colorData[indices[j]])){
+        nconflicts++;
+      }
+    }
+  }
+  
+  return nconflicts;  
+}
+
+int validateDistributedDistance2Coloring(const SparseMatrix& A, int *color, int rank){
+  int nconflicts = 0;
+  
+  SparseMatrix S(A);
+  SparseMatrix B(A);
+  Tpetra::MatrixMatrix::Multiply(A, false, B, false, S);
+  
+  RCP<const SparseMatrix::map_type> rowMap = S.getRowMap();
+  RCP<const SparseMatrix::map_type> colMap = S.getColMap();
+  Vector R = Vector(rowMap);
+  //put the colors in the scalar entries of R.
+  for(size_t i = 0; i < S.getNodeNumRows(); i++){
+    R.replaceLocalValue(i,color[i]);
+  }
+
+  Vector C = Vector(colMap);
+  Import imp = Import(rowMap, colMap);
+  C.doImport(R, imp, Tpetra::REPLACE);
+  
+  Teuchos::ArrayView<const zlno_t> indices;
+  Teuchos::ArrayView<const zscalar_t> values; // Not used
+
+  // Count conflicts in the graph.
+  // Loop over local rows, treat local column indices as edges.
+  size_t n = S.getNodeNumRows();
+  auto colorData = C.getData();
+  for (size_t i=0; i<n; i++) {
+    S.getLocalRowView(i, indices, values);
     for (Teuchos_Ordinal j = 0; j < indices.size(); j++) {
       if ((indices[j] != i) && (color[i] == colorData[indices[j]])){
         nconflicts++;
@@ -186,7 +315,7 @@ int main(int narg, char** arg)
   std::string outputFile = "";           // Output file to write
   std::string colorAlg = "SerialGreedy"; // Default algorithm is the serial greedy one.
   bool verbose = false;                  // Verbosity of output
-  std::string prepartition = "";         // Call Zoltan2 partitioning to better 
+  std::string prepartition = "";         // Call Zoltan2 partitioning to better
                                          // distribute the 
                                          // graph before coloring
   bool prepartition_rows = false;        // When prepartition=rows, 
@@ -199,6 +328,7 @@ int main(int narg, char** arg)
 
   ////// Establish session.
   Tpetra::ScopeGuard tscope(&narg, &arg);
+  Kokkos::print_configuration(std::cout);
   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
   int me = comm->getRank();
 
@@ -206,7 +336,7 @@ int main(int narg, char** arg)
   // Read run-time options.
   Teuchos::CommandLineProcessor cmdp (false, false);
   cmdp.setOption("colorMethod", &colorAlg,
-                 "Coloring algorithms supported: SerialGreedy, Hybrid, 2GL");
+                 "Coloring algorithms supported: SerialGreedy, Hybrid, 2GL, D2");
   cmdp.setOption("inputFile", &inputFile,
                  "Name of a Matrix Market file in the data directory; "
                  "if not specified, a matrix will be generated by Galeri.");
@@ -273,8 +403,162 @@ int main(int narg, char** arg)
 
   RCP<UserInputForTests> uinput;
   RCP<SparseMatrix> Matrix;
-  if(inputFile.find("bin") != string::npos){//we're dealing with a binary file
-    Matrix = readBinaryFile<SparseMatrix>(inputFile,comm,true,false);
+  RCP<CrsGraph> crs_graph;
+  if(inputFile.find("ebin") != string::npos){//we're dealing with a binary file
+    procid = comm->getRank();
+    nprocs = comm->getSize();
+    graph_gen_data_t* ggi = new graph_gen_data_t;
+    //char* filename = new char[inputFile.length()+2];
+    //strncpy(filename, inputFile.c_str(),inputFile.length());
+    //filename[inputFile.length()+1] = '\0';
+    //debug = true;
+    printf("--Rank %d: Reading File %s\n",comm->getRank(), inputFile.c_str());
+    if(comm->getSize() > 1) load_graph_edges(inputFile.c_str(), ggi);
+    else load_graph_edges_threaded(inputFile.c_str(), ggi);
+    //delete [] filename;
+    if(comm->getSize() > 1) {
+      printf("--Rank %d: going to exchange edges\n",comm->getRank());
+      exchange_edges(ggi);
+    }
+    color_dist_graph_t* dist_graph = new color_dist_graph_t;
+    printf("--Rank %d: creating graph\n", comm->getRank());
+    if(comm->getSize() > 1) {
+      create_graph(ggi,dist_graph);
+      printf("--Rank %d: relabeling edges\n",comm->getRank());
+      relabel_edges(dist_graph);
+    } else if (comm->getSize() == 1){
+      create_graph_serial(ggi,dist_graph);
+    }
+    delete ggi;
+    if(prepartition_rows||prepartition_nonzeros && comm->getSize() > 1){  
+      //xtrapulp partitioning
+      printf("--Rank %d: creating XtraPuLP inputs\n",comm->getRank()); 
+      int num_parts = nprocs;
+      int* parts = new int[dist_graph->n_local];
+      
+      double vert_balance = 1.1;
+      double edge_balance = 1.1;
+      int num_weights = 0;
+      bool do_lp_init = false;
+      bool do_bfs_init = true;
+      bool do_repart = false;
+      bool do_edge_balance = prepartition_nonzeros;
+      bool do_maxcut_min = false;
+      bool verbose_output = true;
+      int pulp_seed = rand();
+  
+      Zoltan2::pulp_part_control_t ppc = {vert_balance, edge_balance,
+                                 nullptr,0,
+                                 do_lp_init, do_bfs_init, do_repart,
+                                 do_edge_balance, do_maxcut_min,
+                                 verbose_output, pulp_seed};
+      uint64_t* sendbuf = new uint64_t[nprocs];
+      uint64_t* recvbuf = new uint64_t[nprocs];
+      for (int i = 0; i < nprocs; i++)sendbuf[i] = dist_graph->n_local;
+      MPI_Alltoall(sendbuf,1,MPI_UNSIGNED_LONG_LONG,recvbuf,1,MPI_UNSIGNED_LONG_LONG,MPI_COMM_WORLD);
+      int proc = 0;
+      unsigned long* verts_per_rank = new unsigned long[nprocs+1];
+      verts_per_rank[0] = 0;
+      for(uint64_t i = 1; i < nprocs+1; i ++){
+        verts_per_rank[i] = verts_per_rank[i-1] + recvbuf[i-1];
+      }
+      delete [] sendbuf;
+      delete [] recvbuf;
+
+      uint64_t* global_edges = new uint64_t[dist_graph->m_local];
+      for(int i = 0; i < dist_graph->m_local; i++){
+        if(dist_graph->out_edges[i] < dist_graph->n_local)
+          global_edges[i] = dist_graph->local_unmap[dist_graph->out_edges[i]];
+        else 
+          global_edges[i] = dist_graph->ghost_unmap[dist_graph->out_edges[i]-dist_graph->n_local];
+      }
+      Zoltan2::dist_graph_t xp_g;
+      printf("Creating xtrapulp graph\n");
+
+      Zoltan2::create_xtrapulp_dist_graph(&xp_g, dist_graph->n, dist_graph->m,
+        dist_graph->n_local,dist_graph->m_local,
+        global_edges, dist_graph->out_offsets, dist_graph->local_unmap, verts_per_rank,
+        0, NULL, NULL);
+    
+      printf("--Rank %d: calling xtrapulp_run\n",comm->getRank());
+      Zoltan2::xtrapulp_run(&xp_g, &ppc, parts, num_parts); 
+      delete [] global_edges;
+      printf("--Rank %d: going to repartition the input graph\n",comm->getRank());
+      mpi_data_t* mpi_data = new mpi_data_t;
+      color_init_comm_data(mpi_data);
+      repart_graph(dist_graph, mpi_data, parts);  
+      color_clear_comm_data(mpi_data);  
+      if(comm->getSize() > 1){
+        relabel_edges(dist_graph);
+      }
+    }
+    Tpetra::global_size_t globalVtx = dist_graph->n;
+    std::vector<map_t::global_ordinal_type> gids;
+    for(int i = 0; i < dist_graph->n_local; i++) {
+      gids.push_back(dist_graph->local_unmap[i]);
+    }
+    //printf("\n");
+    Tpetra::global_size_t dummy = Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid();
+    RCP<map_t> rowMap = rcp(new map_t(dummy, Teuchos::arrayViewFromVector(gids), 0, comm));
+
+    for(int i = 0; i < dist_graph->n_total - dist_graph->n_local; i++){
+      gids.push_back(dist_graph->ghost_unmap[i]);
+    } 
+    //printf("--Rank %d: maxGID = %llu minGID = %llu\n",comm->getRank(),maxGID,minGID);
+    dummy = Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid();
+    RCP<map_t> colMap = rcp(new map_t(dummy, Teuchos::arrayViewFromVector(gids), 0, comm));
+    row_map_t::non_const_type rowPointers = row_map_t::non_const_type("offsets",dist_graph->n_local+1);
+    entries_t adjacencies = entries_t("adjs", dist_graph->m_local);
+    for(int i = 0; i < dist_graph->n_local+1; i++) rowPointers(i) = dist_graph->out_offsets[i];
+    for(int i = 0; i < dist_graph->m_local; i++) {
+      adjacencies(i) = dist_graph->out_edges[i];
+    }
+    crs_graph = rcp(new CrsGraph(rowMap, colMap, rowPointers, adjacencies));
+    crs_graph->fillComplete(); 
+    Matrix = rcp(new SparseMatrix(crs_graph));
+    Matrix->fillComplete();
+    if(colorMethod == "Zoltan"){
+      int error;
+      float version;
+      if((error = Zoltan_Initialize(narg,arg,&version)) != ZOLTAN_OK){
+        std::cout<<"fatal: Zoltan_Initialize returned error code "<<error<<"\n";
+        return 0;
+      }
+      std::cout<<"Zoltan initialized, version "<<version<<"\n";
+      Zoltan_Struct *zz = Zoltan_Create(MPI_COMM_WORLD);
+      Zoltan_Set_Param(zz,"DEBUG_LEVEL","1");
+      Zoltan_Set_Param(zz,"NUM_GID_ENTRIES","1");
+      Zoltan_Set_Param(zz,"NUM_LID_ENTRIES","1");
+
+      Zoltan_Set_Num_Obj_Fn(zz, get_num_elements, dist_graph);
+      Zoltan_Set_Obj_List_Fn(zz, get_elements, dist_graph);
+      Zoltan_Set_Num_Edges_Multi_Fn(zz, get_num_edges_list, dist_graph);
+      Zoltan_Set_Edge_List_Multi_Fn(zz, get_edge_list, dist_graph);
+      Zoltan_Set_Param(zz, "COLORING_PROBLEM","DISTANCE-1");
+      
+      int* colors = new int[dist_graph->n_local];
+      ZOLTAN_ID_PTR gids = new unsigned int[dist_graph->n_local];
+      for(int i = 0; i < dist_graph->n_local; i++) gids[i] = dist_graph->local_unmap[i];
+      Zoltan_Color(zz, 1, dist_graph->n_local, gids, colors);
+
+      int testReturn = validateDistributedColoring(Matrix,colors,me);
+      int numGlobalConflicts = 0;
+      Teuchos::reduceAll<int,int>(*comm, Teuchos::REDUCE_SUM,1,&testReturn,&numGlobalConflicts);
+      if(me == 0 && numGlobalConflicts > 0){
+        std::cout<<"FAIL Zoltan returned an invalid coloring\n";
+      } else if (me ==0) {
+        int local_max_color = 0;
+        for(int i = 0; i < dist_graph->n_local;i++){
+          if( local_max_color < colors[i]) local_max_color = colors[i];
+        } 
+        int global_max_color = 0;
+        Teuchos::reduceAll<int,int>(*comm, Teuchos::REDUCE_MAX,1,&local_max_color, &global_max_color);
+        std::cout<<"PASS, Zoltan used "<<global_max_color<<" colors\n";
+      }
+      return 0;
+    }
+    delete dist_graph;
+    //Matrix = readBinaryFile<SparseMatrix>(inputFile,comm,true,false);
   } else { 
     if (inputFile != ""){ // Input file specified; read a matrix
       uinput = rcp(new UserInputForTests(testDataFilePath, inputFile,
@@ -292,8 +576,8 @@ int main(int narg, char** arg)
          << "NumNonzeros = " << Matrix->getGlobalNumEntries() << std::endl
          << "NumProcs = " << comm->getSize() << std::endl;
 
-  if (prepartition != "") {
-
+  if (prepartition != "" && inputFile.find("ebin") == string::npos) {
+    std::cout<<comm->getRank()<<": Starting to pre-partition, creating adapter\n";
     // Compute new partition of matrix
     std::unique_ptr<SparseMatrixAdapter> zadapter;
     if (prepartition_nonzeros) {
@@ -303,15 +587,18 @@ int main(int narg, char** arg)
     else {
       zadapter = std::unique_ptr<SparseMatrixAdapter>(new SparseMatrixAdapter(Matrix));
     }
+    std::cout<<comm->getRank()<<": created adapter, creating PartitioningProblem\n";
     Teuchos::ParameterList zparams;
-    zparams.set("algorithm", "parmetis");
+    zparams.set("algorithm", "pulp");
     zparams.set("imbalance_tolerance", 1.05);
     zparams.set("partitioning_approach", "partition");
     Zoltan2::PartitioningProblem<SparseMatrixAdapter> 
              zproblem(zadapter.get(), &zparams);
+    std::cout<<comm->getRank()<<": created PartitioningProblem, starting to solve\n";
     zproblem.solve();
-
+    std::cout<<comm->getRank()<<": solved Partitioning Problem\n";
     // Print partition characteristics before and after
+    std::cout<<comm->getRank()<<": applying partition\n";
     typedef Zoltan2::EvaluatePartition<SparseMatrixAdapter> quality_t;
     quality_t evalbef(zadapter.get(), &zparams, comm, NULL);
     if (me == 0) {
@@ -324,32 +611,43 @@ int main(int narg, char** arg)
       std::cout << "AFTER PREPARTITION:  Partition statistics:" << std::endl;
       evalaft.printMetrics(std::cout);
     }
-
+    std::cout<<comm->getRank()<<": done evaluating, migrating matrix to use new partitioning\n";
     // Migrate matrix to the new partition
-    RCP<SparseMatrix> newMatrix;
-    zadapter->applyPartitioningSolution(*Matrix, newMatrix,
+    //RCP<SparseMatrix> newMatrix;
+    zadapter->applyPartitioningSolution(*Matrix, Matrix,
                                        zproblem.getSolution());
-    Matrix = newMatrix;
+    //std::cout<<comm->getRank()<<": done applying, replacing old matrix with new one\n";
+    //Matrix = newMatrix;
+    std::cout<<comm->getRank()<<": done replacing, finished partitioning\n";
   }
 
+  
+
   ////// Specify problem parameters
+  std::cout<<comm->getRank()<<": creating params\n";
   Teuchos::ParameterList params;
   params.set("color_choice", colorMethod);
   params.set("color_method", colorAlg);
   params.set("Hybrid_batch_size",batchSize);
   params.set("Kokkos_only_interior",kokkosOnlyInterior);
+  std::cout<<comm->getRank()<<": done creating params\n";
   //params.set("balance_colors", balanceColors); // TODO
 
   ////// Create an input adapter for the Tpetra matrix.
+  std::cout<<comm->getRank()<<": creating SparseMatrixAdapter\n";
   SparseMatrixAdapter adapter(Matrix);
+  std::cout<<comm->getRank()<<": done creating adapter\n";
 
   ////// Create and solve ordering problem
   try
   {
+  std::cout<<comm->getRank()<<": creating a coloring problem\n";
   Zoltan2::ColoringProblem<SparseMatrixAdapter> problem(&adapter, &params);
+  std::cout<<comm->getRank()<<": done creating a coloring problem\n";
   if(comm->getRank()==0) std::cout << "Going to color" << std::endl;
+  //cudaProfilerStart();
   problem.solve();
-
+  //cudaProfilerStop();
   ////// Basic metric checking of the coloring solution
   size_t checkLength;
   int *checkColoring = nullptr;
@@ -358,7 +656,12 @@ int main(int narg, char** arg)
   if(comm->getRank()==0) std::cout << "Going to get results" << std::endl;
   // Check that the solution is really a coloring
   checkLength = soln->getColorsSize();
-  if(checkLength >0) checkColoring = soln->getColors();
+  if(checkLength >0){
+    checkColoring = soln->getColors();
+    /*for(int i = 0; i <checkLength; i++){
+      std::cout<<"local vertex "<<i+1<<" is colored "<<checkColoring[i]<<"\n";
+    }*/
+  }
   
   if (outputFile != "") {
     std::ofstream colorFile;
@@ -386,9 +689,12 @@ int main(int narg, char** arg)
   
   std::cout << "Going to validate the soln" << std::endl;
   // Verify that checkColoring is a coloring
-  if(colorAlg=="2GL" ||colorAlg == "Hybrid"){
+  if(colorAlg=="D2"){
+    testReturn = validateDistributedDistance2Coloring(*Matrix,checkColoring,me);
+    //testReturn += validateDistributedColoring(Matrix,checkColoring,me);
+  }else if(colorAlg=="2GL" ||colorAlg == "Hybrid"){
     //need to check a distributed coloring
-    testReturn = validateDistributedColoring(*Matrix, checkColoring, me);
+    testReturn = validateDistributedColoring(Matrix, checkColoring, me);
   } else if (checkLength > 0){
     testReturn = validateColoring(Matrix, checkColoring);
   }
@@ -414,6 +720,5 @@ int main(int narg, char** arg)
       std::cout << "PASS" << std::endl;
     }
   }
-
 }
 

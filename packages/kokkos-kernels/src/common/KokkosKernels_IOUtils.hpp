@@ -2,10 +2,11 @@
 //@HEADER
 // ************************************************************************
 //
-//               KokkosKernels 0.9: Linear Algebra and Graph Kernels
-//                 Copyright 2017 Sandia Corporation
+//                        Kokkos v. 3.0
+//       Copyright (2020) National Technology & Engineering
+//               Solutions of Sandia, LLC (NTESS).
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
+// Under the terms of Contract DE-NA0003525 with NTESS,
 // the U.S. Government retains certain rights in this software.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +24,10 @@
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 // IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL NTESS OR THE
 // CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
 // EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
 // PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
@@ -83,22 +84,23 @@ void kk_sparseMatrix_generate(
   rowPtr[0] = 0;
   for(int row=0;row<nrows;row++)
   {
-    int varianz = (1.0*rand()/INT_MAX-0.5)*row_size_variance;
-    rowPtr[row+1] = rowPtr[row] + elements_per_row+varianz;
+    int varianz = (1.0*rand()/RAND_MAX-0.5)*row_size_variance;
+    int numRowEntries = elements_per_row + varianz;
+    if(numRowEntries < 0)
+      numRowEntries = 0;
+    rowPtr[row+1] = rowPtr[row] + numRowEntries;
   }
   nnz = rowPtr[nrows];
   values = new ScalarType[nnz];
   colInd = new OrdinalType[nnz];
   for(OrdinalType row=0;row<nrows;row++)
   {
-
     for(SizeType k=rowPtr[row] ;k<rowPtr[row+1];k++)
     {
-
       while (true){
-        OrdinalType pos = (1.0*rand()/INT_MAX-0.5)*bandwidth+row;
-        if(pos<0) pos+=ncols;
-        if(pos>=ncols) pos-=ncols;
+        OrdinalType pos = (1.0*rand()/RAND_MAX-0.5)*bandwidth+row;
+        while(pos<0) pos+=ncols;
+        while(pos>=ncols) pos-=ncols;
 
         bool is_already_in_the_row = false;
         for(SizeType j = rowPtr[row] ; j<k ;j++){
@@ -110,12 +112,10 @@ void kk_sparseMatrix_generate(
         if (!is_already_in_the_row) {
 
           colInd[k]= pos;
-          values[k] = 100.0*rand()/INT_MAX-50.0;
+          values[k] = 100.0*rand()/RAND_MAX-50.0;
           break;
         }
       }
-
-
     }
   }
 }
@@ -139,7 +139,6 @@ void kk_sparseMatrix_generate_lower_upper_triangle(
   rowPtr[0] = 0;
   for(int row=0;row<nrows;row++)
   {
-    //int varianz = (1.0*rand()/INT_MAX-0.5)*row_size_variance;
     if (uplo =='L')
       rowPtr[row+1] = rowPtr[row] + row + 1;
     else
@@ -179,7 +178,7 @@ void kk_diagonally_dominant_sparseMatrix_generate(
   rowPtr[0] = 0;
   for(int row=0;row<nrows;row++)
   {
-    int varianz = (1.0*rand()/INT_MAX-0.5)*row_size_variance;
+    int varianz = (1.0*rand()/RAND_MAX-0.5)*row_size_variance;
     rowPtr[row+1] = rowPtr[row] + elements_per_row+varianz;
   }
   nnz = rowPtr[nrows];
@@ -193,13 +192,13 @@ void kk_diagonally_dominant_sparseMatrix_generate(
     {
       OrdinalType pos = row;
       while (pos == row){
-        pos = ((1.0*rand())/INT_MAX-0.5)*bandwidth+row;
+        pos = ((1.0*rand())/RAND_MAX-0.5)*bandwidth+row;
       }
       if(pos<0) pos+=ncols;
 
       if(pos>=ncols) pos-=ncols;
       colInd[k]= pos;
-      values[k] = 100.0*rand()/INT_MAX-50.0;
+      values[k] = 100.0*rand()/RAND_MAX-50.0;
       total_values += Kokkos::Details::ArithTraits<ScalarType>::abs(values[k]);
     }
 
@@ -1135,10 +1134,14 @@ int read_mtx (
   }
   //numEdges is only an upper bound (diagonal entries may be removed)
   std::vector <struct Edge<lno_t, scalar_t> > edges (numEdges);
+  std::cout<<"Size of edge vector = "<<numEdges<<"\n";
   size_type nE = 0;
   lno_t numDiagonal = 0;
+  size_t sus_read = 0;
+  size_t sus_symmetrized = 0;
   for (size_type i = 0; i < nnz; ++i){
-    getline(mmf, fline);
+    bool valid = getline(mmf, fline);
+    if (!valid) continue;
     std::stringstream ss2 (fline);
     struct Edge<lno_t, scalar_t> tmp;
     //read source, dest (edge) and weight (value)
@@ -1156,6 +1159,7 @@ int read_mtx (
     {
       //In coordinate format, row and col of each entry is read from file
       ss2 >> s >> d;
+      if(s == 3008778 && d == 331954) sus_read++;
     }
     if(mtx_field == PATTERN)
       w = 1;
@@ -1175,10 +1179,12 @@ int read_mtx (
       numDiagonal++;
       if (!remove_diagonal){
         edges[nE++] = tmp;
+        if(tmp.src == 3008777 && tmp.dst == 331953) std::cout<<"Adding suspicious edge, mistaken as a diagonal\n";
       }
       continue;
     }
     edges[nE++] = tmp;
+    if(tmp.src == 3008777 && tmp.dst == 331953) std::cout<<"Adding suspicious edge, offending line is: "<<fline<<"\n";
     if (symmetrize){
       struct Edge<lno_t, scalar_t> tmp2;
       tmp2.src = tmp.dst;
@@ -1186,6 +1192,7 @@ int read_mtx (
       //the symmetrized value is w, -w or conj(w) if mtx_sym is
       //SYMMETRIC, SKEW_SYMMETRIC or HERMITIAN, respectively.
       tmp2.ew = symmetryFlip<scalar_t>(tmp.ew, mtx_sym);
+      if(tmp2.src == 3008777 && tmp2.dst == 331953) std::cout<<"Adding suspicious edge, in symmetrize\n";
       edges[nE++] = tmp2;
     }
   }
@@ -1207,10 +1214,12 @@ int read_mtx (
   md_malloc<scalar_t>(ew, nE);
   size_type eind = 0;
   size_type actual = 0;
+  size_type num_sus_adjs = 0;
   for (lno_t i = 0; i < nr; ++i){
     (*xadj)[i] = actual;
     bool is_first = true;
     while (eind < nE && edges[eind].src == i){
+      if (i == 3008777 && edges[eind].dst == 331953) num_sus_adjs++;
       if (is_first || !symmetrize || eind == 0 || (eind > 0 && edges[eind - 1].dst != edges[eind].dst)){
         (*adj)[actual] = edges[eind].dst;
         (*ew)[actual] = edges[eind].ew;
@@ -1222,6 +1231,8 @@ int read_mtx (
   }
   (*xadj)[nr] = actual;
   *ne = actual;
+  std::cout<<"Suspicious edges read: "<<sus_read<<"\n";
+  std::cout<<"#edges from 3008777 to 331953: "<<num_sus_adjs<<"\n";
   return 0;
 }
 
@@ -1282,7 +1293,7 @@ crsMat_t read_kokkos_crst_matrix(const char * filename_){
     for (lno_t i = 0; i <= nv; ++i){
       hr(i) = xadj[i];
     }
-
+    std::cout<<"#adjs for vtx 3008777: "<<xadj[3008778] - xadj[3008777]<<"\n";
     for (size_type i = 0; i < nnzA; ++i){
       hc(i) = adj[i];
       hv(i) = values[i];

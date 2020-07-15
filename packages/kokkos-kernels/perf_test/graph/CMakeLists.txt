@@ -3,7 +3,7 @@ KOKKOSKERNELS_INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
 
 KOKKOSKERNELS_ADD_EXECUTABLE(
   graph_color
-  SOURCES KokkosGraph_color.cpp       
+  SOURCES KokkosGraph_color.cpp
   )
 
 KOKKOSKERNELS_ADD_EXECUTABLE(
@@ -17,4 +17,3 @@ KOKKOSKERNELS_ADD_EXECUTABLE(
 #  graph_triangle
 #  SOURCES KokkosGraph_triangle.cpp      
 #  )
-

@@ -2,10 +2,11 @@
 //@HEADER
 // ************************************************************************
 //
-//               KokkosKernels 0.9: Linear Algebra and Graph Kernels
-//                 Copyright 2017 Sandia Corporation
+//                        Kokkos v. 3.0
+//       Copyright (2020) National Technology & Engineering
+//               Solutions of Sandia, LLC (NTESS).
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
+// Under the terms of Contract DE-NA0003525 with NTESS,
 // the U.S. Government retains certain rights in this software.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +24,10 @@
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 // IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL NTESS OR THE
 // CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
 // EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
 // PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
@@ -101,31 +102,31 @@ void get_suggested_vector_team_size(
     suggested_team_size_ = 1;
 
 #if defined( KOKKOS_ENABLE_SERIAL )
-  if (Kokkos::Impl::is_same< Kokkos::Serial , ExecutionSpace >::value){
+  if (std::is_same< Kokkos::Serial , ExecutionSpace >::value){
     suggested_vector_size_ =  1;
     suggested_team_size_ = 1;
   }
 #endif
 
 #if defined( KOKKOS_ENABLE_THREADS )
-  if (Kokkos::Impl::is_same< Kokkos::Threads , ExecutionSpace >::value){
+  if (std::is_same< Kokkos::Threads , ExecutionSpace >::value){
     suggested_vector_size_ =  1;
     suggested_team_size_ =  1;
   }
 #endif
 
 #if defined( KOKKOS_ENABLE_OPENMP )
-  if (Kokkos::Impl::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
+  if (std::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
     suggested_vector_size_ =  1;
     suggested_team_size_ = 1;
   }
 #endif
 
 #if defined( KOKKOS_ENABLE_CUDA )
-  if (Kokkos::Impl::is_same<Kokkos::Cuda, ExecutionSpace >::value){
+  if (std::is_same<Kokkos::Cuda, ExecutionSpace >::value){
 
     suggested_vector_size_ = nnz / double (nr) + 0.5;
-
+    std::cout<<"\tsuggested_vector_size_ = "<<suggested_vector_size_<<" nnz = "<<nnz<<", nr = "<<nr<<"\n";
     if (suggested_vector_size_ <= 3){
       suggested_vector_size_ = 2;
     }
@@ -151,7 +152,7 @@ void get_suggested_vector_team_size(
 #endif
 
 #if defined( KOKKOS_ENABLE_QTHREAD)
-  if (Kokkos::Impl::is_same< Kokkos::Qthread, ExecutionSpace >::value){
+  if (std::is_same< Kokkos::Qthread, ExecutionSpace >::value){
     suggested_vector_size_ = 1;
     suggested_team_size_ = 1;
   }
@@ -168,25 +169,25 @@ void get_suggested_vector_size(
     suggested_vector_size_ =  1;
 
 #if defined( KOKKOS_ENABLE_SERIAL )
-  if (Kokkos::Impl::is_same< Kokkos::Serial , ExecutionSpace >::value){
+  if (std::is_same< Kokkos::Serial , ExecutionSpace >::value){
     suggested_vector_size_ =  1;
   }
 #endif
 
 #if defined( KOKKOS_ENABLE_THREADS )
-  if (Kokkos::Impl::is_same< Kokkos::Threads , ExecutionSpace >::value){
+  if (std::is_same< Kokkos::Threads , ExecutionSpace >::value){
     suggested_vector_size_ =  1;
   }
 #endif
 
 #if defined( KOKKOS_ENABLE_OPENMP )
-  if (Kokkos::Impl::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
+  if (std::is_same< Kokkos::OpenMP, ExecutionSpace >::value){
     suggested_vector_size_ =  1;
   }
 #endif
 
 #if defined( KOKKOS_ENABLE_CUDA )
-  if (Kokkos::Impl::is_same<Kokkos::Cuda, ExecutionSpace >::value){
+  if (std::is_same<Kokkos::Cuda, ExecutionSpace >::value){
 
     suggested_vector_size_ = nnz / double (nr) + 0.5;
 
@@ -209,7 +210,7 @@ void get_suggested_vector_size(
 #endif
 
 #if defined( KOKKOS_ENABLE_QTHREAD)
-  if (Kokkos::Impl::is_same< Kokkos::Qthread, ExecutionSpace >::value){
+  if (std::is_same< Kokkos::Qthread, ExecutionSpace >::value){
     suggested_vector_size_ = 1;
   }
 #endif

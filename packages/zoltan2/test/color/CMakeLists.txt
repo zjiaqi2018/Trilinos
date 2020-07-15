@@ -2,7 +2,7 @@
 IF (${PROJECT_NAME}_ENABLE_Galeri)
   TRIBITS_ADD_EXECUTABLE_AND_TEST(
     Coloring1
-    SOURCES coloring1.cpp
+    SOURCES util.cpp fast_map.cpp dist_graph.cpp io_pp.cpp coloring1.cpp
     NUM_MPI_PROCS 4
     COMM serial mpi
     PASS_REGULAR_EXPRESSION "PASS"

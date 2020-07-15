@@ -2,10 +2,11 @@
 //@HEADER
 // ************************************************************************
 //
-//               KokkosKernels 0.9: Linear Algebra and Graph Kernels
-//                 Copyright 2017 Sandia Corporation
+//                        Kokkos v. 3.0
+//       Copyright (2020) National Technology & Engineering
+//               Solutions of Sandia, LLC (NTESS).
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
+// Under the terms of Contract DE-NA0003525 with NTESS,
 // the U.S. Government retains certain rights in this software.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,10 +24,10 @@
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 // IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL NTESS OR THE
 // CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
 // EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
 // PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
@@ -463,12 +464,6 @@ inline void kk_transpose_graph(
       out_row_view_t, out_nnz_view_t, out_nnz_view_t,
       tempwork_row_view_t, MyExecSpace>  TransposeFunctor_t;
 
-  TransposeFunctor_t tm ( num_rows, num_cols, xadj, adj, tmp1,
-                          t_xadj, t_adj, tmp2,
-                          tmp_row_view,
-                          false,
-                          team_work_chunk_size);
-
   typedef typename TransposeFunctor_t::team_count_policy_t count_tp_t;
   typedef typename TransposeFunctor_t::team_fill_policy_t fill_tp_t;
   typedef typename TransposeFunctor_t::dynamic_team_count_policy_t d_count_tp_t;
@@ -489,6 +484,11 @@ inline void kk_transpose_graph(
     team_work_chunk_size = suggested_team_size;
 
 
+  TransposeFunctor_t tm ( num_rows, num_cols, xadj, adj, tmp1,
+                          t_xadj, t_adj, tmp2,
+                          tmp_row_view,
+                          false,
+                          team_work_chunk_size);
 
   if (use_dynamic_scheduling){
     Kokkos::parallel_for(  "KokkosKernels::Common::TransposeGraph::DynamicSchedule::S0", d_count_tp_t(num_rows  / team_work_chunk_size + 1 , suggested_team_size, vector_size), tm);
