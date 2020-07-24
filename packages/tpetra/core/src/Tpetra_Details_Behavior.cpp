@@ -398,7 +398,18 @@ bool Behavior::useMergePathMultiVector()
     (value_, initialized_, envVarName, defaultValue);
 }
 
-  size_t Behavior::multivectorKernelLocationThreshold ()
+size_t Behavior::multivectorUnitTestVecSize ()
+{
+  constexpr char envVarName[] = "TPETRA_UNIT_TEST_VEC_SIZE";
+  constexpr size_t defaultValue = (100000);
+
+  static size_t value_ = defaultValue;
+  static bool initialized_ = false;
+  return idempotentlyGetEnvironmentVariableAsSize
+    (value_, initialized_, envVarName, defaultValue);
+}
+
+size_t Behavior::multivectorKernelLocationThreshold ()
 {
   constexpr char envVarName[] = "TPETRA_VECTOR_DEVICE_THRESHOLD";
   constexpr size_t defaultValue (10000);

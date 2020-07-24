@@ -246,6 +246,7 @@ public:
   /// By default this is 10000, but may be altered by the environment
   /// variable TPETRA_VECTOR_DEVICE_THRESHOLD
   static size_t multivectorKernelLocationThreshold ();
+  static size_t multivectorUnitTestVecSize ();
 
   /// \brief Use Teuchos::Timer in Tpetra::ProfilingRegion
   ///

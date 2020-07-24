@@ -49,6 +49,11 @@
 #include "Teuchos_TypeNameTraits.hpp"
 #include <iterator>
 
+// timing includes
+#include "Tpetra_Details_Behavior.hpp"
+#include "Tpetra_Details_Profiling.hpp"
+
+
 // FINISH: add test for MultiVector with a node containing zero local entries
 // FINISH: add tests for local MultiVectors
 
@@ -288,6 +293,8 @@ namespace {
     using map_type = Tpetra::Map<LO, GO, Node>;
     using MV = Tpetra::MultiVector<Scalar, LO, GO, Node>;
     using vec_type = Tpetra::Vector<Scalar, LO, GO, Node>;
+    using Tpetra::Details::Behavior;
+    using Tpetra::Details::ProfilingRegion;
     typedef typename ScalarTraits<Scalar>::magnitudeType Magnitude;
     constexpr bool debug = true;
 
@@ -296,22 +303,29 @@ namespace {
       Teuchos::rcpFromRef (out);
     Teuchos::FancyOStream& myOut = *outPtr;
 
-    myOut << "Test: MultiVector, basic" << endl;
+    myOut << "Test: MultiVector, extra large" << endl;
     Teuchos::OSTab tab0 (myOut);
-
+    
     const global_size_t INVALID = OrdinalTraits<global_size_t>::invalid ();
     RCP<const Comm<int> > comm = getDefaultComm ();
     const int numImages = comm->getSize ();
 
+    
+    ProfilingRegion glob("large multivector overall");
+
     myOut << "Create Map" << endl;
-    const size_t numLocal = 15000;
+    const size_t numLocal = Tpetra::Details::Behavior::multivectorUnitTestVecSize();
     const size_t numVecs  = 10;
     const GO indexBase = 0;
-    RCP<const map_type> map =
-      rcp (new map_type (INVALID, numLocal, indexBase, comm));
+    RCP<const map_type> map;
+    {
+      ProfilingRegion r("Create Map");
+      map = rcp (new map_type (INVALID, numLocal, indexBase, comm));
+    }
 
     myOut << "Test MultiVector's & Vector's default constructors" << endl;
     {
+      ProfilingRegion r("default constructors");
       MV defaultConstructedMultiVector;
       auto dcmv_map = defaultConstructedMultiVector.getMap ();
       TEST_ASSERT( dcmv_map.get () != nullptr );
@@ -330,32 +344,39 @@ namespace {
 
     myOut << "Test MultiVector's usual constructor" << endl;
     RCP<MV> mvec;
-    TEST_NOTHROW( mvec = rcp (new MV (map, numVecs, true)) );
-    if (mvec.is_null ()) {
-      myOut << "MV constructor threw an exception: returning" << endl;
-      return;
+    {
+      ProfilingRegion r("normal constructor");
+      TEST_NOTHROW( mvec = rcp (new MV (map, numVecs, true)) );
+      if (mvec.is_null ()) {
+	myOut << "MV constructor threw an exception: returning" << endl;
+	return;
+      }
     }
     TEST_EQUALITY( mvec->getNumVectors(), numVecs );
     TEST_EQUALITY( mvec->getLocalLength(), numLocal );
     TEST_EQUALITY( mvec->getGlobalLength(), numImages*numLocal );
 
     myOut << "Test that all norms are zero" << endl;
-    Array<Magnitude> norms(numVecs), zeros(numVecs);
-    std::fill(zeros.begin(),zeros.end(),ScalarTraits<Magnitude>::zero());
-    TEST_NOTHROW( mvec->norm2(norms) );
-    TEST_COMPARE_FLOATING_ARRAYS(norms,zeros,ScalarTraits<Magnitude>::zero());
-    TEST_NOTHROW( mvec->norm1(norms) );
-    TEST_COMPARE_FLOATING_ARRAYS(norms,zeros,ScalarTraits<Magnitude>::zero());
-    TEST_NOTHROW( mvec->normInf(norms) );
-    TEST_COMPARE_FLOATING_ARRAYS(norms,zeros,ScalarTraits<Magnitude>::zero());
-    // print it
-    myOut << *mvec << endl;
+    {
+      ProfilingRegion r("zero norms");
+      Array<Magnitude> norms(numVecs), zeros(numVecs);
+      std::fill(zeros.begin(),zeros.end(),ScalarTraits<Magnitude>::zero());
+      TEST_NOTHROW( mvec->norm2(norms) );
+      TEST_COMPARE_FLOATING_ARRAYS(norms,zeros,ScalarTraits<Magnitude>::zero());
+      TEST_NOTHROW( mvec->norm1(norms) );
+      TEST_COMPARE_FLOATING_ARRAYS(norms,zeros,ScalarTraits<Magnitude>::zero());
+      TEST_NOTHROW( mvec->normInf(norms) );
+      TEST_COMPARE_FLOATING_ARRAYS(norms,zeros,ScalarTraits<Magnitude>::zero());
+      // print it
+      myOut << *mvec << endl;
+    }
 
     // Make sure that the test passed on all processes, not just Proc 0.
     int lclSuccess = success ? 1 : 0;
     int gblSuccess = 1;
     reduceAll<int, int> (*comm, REDUCE_MIN, lclSuccess, outArg (gblSuccess));
     TEST_ASSERT( gblSuccess == 1 );
+    
   }
 
 
