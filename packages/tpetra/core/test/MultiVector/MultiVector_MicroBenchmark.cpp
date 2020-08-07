@@ -47,7 +47,9 @@
 #include "Teuchos_ScalarTraits.hpp"
 #include "Kokkos_ArithTraits.hpp"
 #include "Tpetra_Details_Profiling.hpp"
+#include "Tpetra_Details_Behavior.hpp"
 #include "KokkosBlas.hpp"
+#include <Teuchos_XMLParameterListHelpers.hpp>
 
 namespace { // (anonymous)
 
@@ -136,13 +138,147 @@ namespace { // (anonymous)
     }
   }
 
+
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL( MultiVector, MicroBenchmark_onDevice, SC, LO, GO, NT )
+  {
+    using Tpetra::Details::Behavior;
+    using Tpetra::Details::ProfilingRegion;
+    using Teuchos::TimeMonitor;
+    using Teuchos::ParameterList;
+
+    typedef Tpetra::Map<LO, GO, NT> map_type;
+    typedef Tpetra::MultiVector<SC, LO, GO, NT> MV;
+    typedef Teuchos::ScalarTraits<SC> STS;
+    typedef Teuchos::stat_map_type stat_map_type;
+    typedef std::vector<std::string>::size_type size_type;
+    
+    typename MV::impl_scalar_type ONE = STS::one();
+    typename MV::impl_scalar_type ZERO = STS::zero();
+    
+    constexpr bool debug = true;
+
+    RCP<Teuchos::FancyOStream> outPtr = debug ?
+      Teuchos::getFancyOStream (Teuchos::rcpFromRef (std::cerr)) :
+      Teuchos::rcpFromRef (out);
+    Teuchos::FancyOStream& myOut = *outPtr;
+
+    // Problem parameters
+    size_t vector_size = Tpetra::Details::Behavior::multivectorUnitTestVecSize();
+    size_t num_repeats = 2000;
+
+    auto comm = getDefaultComm ();
+    const int numProcs = comm->getSize ();
+    if(numProcs != 1) return;
+
+    const LO lclNumRows = vector_size;
+    const GO indexBase = 0;
+    RCP<const map_type> map (new map_type (lclNumRows, lclNumRows,
+                                           indexBase, comm));
+    const LO numVecs = 1;  // FIXME: This needs to be 1 for the lambda loop to work
+    MV X (map, numVecs), Y(map,numVecs);
+    X.putScalar(ZERO);
+    Y.putScalar(ONE);
+
+    Kokkos::fence();
+
+
+    typedef typename MV::dual_view_type::t_dev dev_view_type;
+    //    typedef typename MV::dual_view_type::t_host host_view_type;
+    typedef typename dev_view_type::memory_space cur_memory_space;
+    typedef typename dev_view_type::execution_space cur_exec_space;
+
+    // Run Tpetra Update Loop
+    {
+      ::Tpetra::Details::ProfilingRegion region ("Tpetra Update Loop");
+      for(size_t i=0; i<num_repeats; i++) {
+        X.update(ONE,Y,ONE);
+        Kokkos::fence();
+      }
+    }
+
+    X.putScalar(ZERO);
+    auto X_lcl = X.template getLocalView<cur_memory_space> ();
+    auto Y_lcl = Y.template getLocalView<cur_memory_space> ();
+
+
+    // Run KokkosBlas Update Loop
+    {
+      ::Tpetra::Details::ProfilingRegion region ("KokkosBlas Update Loop");
+      for(size_t i=0; i<num_repeats; i++) {
+        KokkosBlas::axpby(ONE, X_lcl, ONE, Y_lcl);
+        Kokkos::fence();
+      }
+    }
+
+    X.putScalar(ZERO);
+    Kokkos::fence();
+
+    for (size_t j = 0; j < 50; j++) {
+      ::Tpetra::Details::ProfilingRegion region ("big loop");
+      // Run raw lambda loop
+      Kokkos::RangePolicy<cur_exec_space> policy (0, vector_size);
+      {
+	::Tpetra::Details::ProfilingRegion region ("Raw Lambda Update Loop");
+	for(size_t rep=0; rep<num_repeats; rep++) {
+	  Kokkos::parallel_for(policy,KOKKOS_LAMBDA(const size_t &i) {
+	      // This is what we should do in general
+	      //            X_lcl(i,0) = ONE * X_lcl(i,0) + ONE * Y_lcl(i,0);
+	      // This is the special case code that actually executes inside KokkosKernels for alpha=1
+	      X_lcl(i,0) += ONE * Y_lcl(i,0);
+	    });
+	  Kokkos::fence();
+	}
+      }
+    }
+    Teuchos::ParameterList p0("multivector");
+
+    const std::string filter = "";
+
+    stat_map_type stat_data;
+    std::vector<std::string> stat_names;
+
+    TimeMonitor::computeGlobalTimerStatistics(stat_data, stat_names, comm.ptr(), Teuchos::Union);
+
+    Teuchos::ParameterList p1;
+    for (auto it=stat_data.begin(); it!=stat_data.end(); ++it) {
+      ParameterList px;
+      ParameterList counts;
+      ParameterList times;
+      const std::vector<std::pair<double, double> >& cur_data = it->second;
+      for (size_type ix = 0; ix < cur_data.size(); ++ix) {
+	times.set(stat_names[ix], cur_data[ix].first);
+	counts.set(stat_names[ix], static_cast<int>(cur_data[ix].second));
+      }
+      px.set("Total times", times);
+      px.set("Call counts", counts);
+      p1.set(it->first, px);
+    }
+
+    p0.set("Timing", p1);
+    p0.set("How to merge timer sets", "Union");
+    p0.set("alwaysWriteLocal", false);
+    p0.set("writeGlobalStats", true);
+    p0.set("writeZeroTimers", false);
+
+    std::ostringstream f;
+    f << "vecbench_"
+      << Tpetra::Details::Behavior::multivectorUnitTestVecSize() << "_"
+      << Tpetra::Details::Behavior::multivectorKernelLocationThreshold() << ".xml";
+
+    Teuchos::writeParameterListToXmlFile(p0, f.str());
+    //TimeMonitor::clearCounters();
+    myOut << std::endl;    
+
+  }
+
+
 //
 // INSTANTIATIONS
 //
 
 #define UNIT_TEST_GROUP( SC, LO, GO, NT ) \
-  TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT( MultiVector, MicroBenchmark_Update, SC, LO, GO, NT )
-
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT( MultiVector, MicroBenchmark_Update, SC, LO, GO, NT ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT( MultiVector, MicroBenchmark_onDevice, SC, LO, GO, NT )
   TPETRA_ETI_MANGLING_TYPEDEFS()
 
   TPETRA_INSTANTIATE_TESTMV( UNIT_TEST_GROUP )

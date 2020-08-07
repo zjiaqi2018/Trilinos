@@ -47,6 +47,7 @@
 #include "Teuchos_DefaultSerialComm.hpp"
 #include "Teuchos_SerialDenseMatrix.hpp"
 #include "Teuchos_TypeNameTraits.hpp"
+#include <Teuchos_XMLParameterListHelpers.hpp>
 #include <iterator>
 
 // timing includes
@@ -290,11 +291,15 @@ namespace {
   ////
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL( MultiVector, large, LO, GO, Scalar , Node )
   {
+    typedef std::vector<std::string>::size_type size_type;
+    typedef Teuchos::stat_map_type stat_map_type;
     using map_type = Tpetra::Map<LO, GO, Node>;
     using MV = Tpetra::MultiVector<Scalar, LO, GO, Node>;
     using vec_type = Tpetra::Vector<Scalar, LO, GO, Node>;
     using Tpetra::Details::Behavior;
     using Tpetra::Details::ProfilingRegion;
+    using Teuchos::TimeMonitor;
+    using Teuchos::ParameterList;
     typedef typename ScalarTraits<Scalar>::magnitudeType Magnitude;
     constexpr bool debug = true;
 
@@ -319,13 +324,13 @@ namespace {
     const GO indexBase = 0;
     RCP<const map_type> map;
     {
-      ProfilingRegion r("Create Map");
+      RCP<Teuchos::Time> g = Teuchos::TimeMonitor::getNewCounter("CreateMap");
       map = rcp (new map_type (INVALID, numLocal, indexBase, comm));
     }
 
     myOut << "Test MultiVector's & Vector's default constructors" << endl;
     {
-      ProfilingRegion r("default constructors");
+      RCP<Teuchos::Time> g = Teuchos::TimeMonitor::getNewCounter("DefaultConstructors");
       MV defaultConstructedMultiVector;
       auto dcmv_map = defaultConstructedMultiVector.getMap ();
       TEST_ASSERT( dcmv_map.get () != nullptr );
@@ -345,7 +350,7 @@ namespace {
     myOut << "Test MultiVector's usual constructor" << endl;
     RCP<MV> mvec;
     {
-      ProfilingRegion r("normal constructor");
+      RCP<Teuchos::Time> g = Teuchos::TimeMonitor::getNewCounter("NormalConstructors");
       TEST_NOTHROW( mvec = rcp (new MV (map, numVecs, true)) );
       if (mvec.is_null ()) {
 	myOut << "MV constructor threw an exception: returning" << endl;
@@ -358,7 +363,7 @@ namespace {
 
     myOut << "Test that all norms are zero" << endl;
     {
-      ProfilingRegion r("zero norms");
+      RCP<Teuchos::Time> g = Teuchos::TimeMonitor::getNewCounter("ZeroNorms");
       Array<Magnitude> norms(numVecs), zeros(numVecs);
       std::fill(zeros.begin(),zeros.end(),ScalarTraits<Magnitude>::zero());
       TEST_NOTHROW( mvec->norm2(norms) );
@@ -371,6 +376,44 @@ namespace {
       myOut << *mvec << endl;
     }
 
+    Teuchos::ParameterList p0("multivector");
+
+    const std::string filter = "";
+
+    stat_map_type stat_data;
+    std::vector<std::string> stat_names;
+
+    TimeMonitor::computeGlobalTimerStatistics(stat_data, stat_names, comm.ptr(), Teuchos::Union);
+
+    Teuchos::ParameterList p1;
+    for (auto it=stat_data.begin(); it!=stat_data.end(); ++it) {
+      ParameterList px;
+      ParameterList counts;
+      ParameterList times;
+      const std::vector<std::pair<double, double> >& cur_data = it->second;
+      for (size_type ix = 0; ix < cur_data.size(); ++ix) {
+	times.set(stat_names[ix], cur_data[ix].first);
+	counts.set(stat_names[ix], static_cast<int>(cur_data[ix].second));
+      }
+      px.set("Total times", times);
+      px.set("Call counts", counts);
+      p1.set(it->first, px);
+    }
+
+    p0.set("Timing", p1);
+    p0.set("How to merge timer sets", "Union");
+    p0.set("alwaysWriteLocal", false);
+    p0.set("writeGlobalStats", true);
+    p0.set("writeZeroTimers", false);
+
+    std::ostringstream f;
+    f << "lmvec_"
+      << Tpetra::Details::Behavior::multivectorUnitTestVecSize() << "_"
+      << Tpetra::Details::Behavior::multivectorKernelLocationThreshold() << ".xml";
+
+    Teuchos::writeParameterListToXmlFile(p0, f.str());
+    //TimeMonitor::clearCounters();
+    myOut << std::endl;
     // Make sure that the test passed on all processes, not just Proc 0.
     int lclSuccess = success ? 1 : 0;
     int gblSuccess = 1;
