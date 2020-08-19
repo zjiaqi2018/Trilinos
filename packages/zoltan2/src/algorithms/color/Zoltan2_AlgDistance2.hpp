@@ -1012,7 +1012,7 @@ void AlgDistance2<Adapter>::colorInterior(const size_t nVtx,
                        Teuchos::RCP<femv_t> femv,
                        bool recolor) {
   using KernelHandle = KokkosKernels::Experimental::KokkosKernelsHandle
-      <size_t, lno_t, lno_t, execution_space, memory_space, memory_space>;
+      <offset_t, lno_t, lno_t, execution_space, memory_space, memory_space>;
   
   KernelHandle kh;
   

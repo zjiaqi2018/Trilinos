@@ -64,7 +64,7 @@
 //#include "xtrapulp.h"
 #include "io_pp.h"
 #include "repart_graph.hpp"
-
+#include "IanGraphAdapter.hpp"
 
 using Teuchos::RCP;
 
@@ -100,7 +100,12 @@ typedef Tpetra::Import<z2TestLO, z2TestGO> Import;
 typedef Zoltan2::XpetraCrsMatrixAdapter<SparseMatrix> SparseMatrixAdapter;
 typedef SparseMatrixAdapter::part_t part_t;
 
-extern "C" static int get_num_elements(void *data, int *ierr){
+//using lno_t = Tpetra::Map<>::local_ordinal_type;
+//using gno_t = Tpetra::Map<>::global_ordinal_type;
+//using scalar_t = int;
+//using myTypes = Zoltan2::BasicUserTypes<scalar_t, lno_t, gno_t>;
+using myAdapter = Zoltan2::IanGraphAdapter<Zoltan2::BasicUserTypes<zscalar_t, Tpetra::Map<>::local_ordinal_type, Tpetra::Map<>::global_ordinal_type>>;
+extern "C" int get_num_elements(void *data, int *ierr){
   color_dist_graph_t* dist_graph;
 
   if(data == NULL){
@@ -113,7 +118,7 @@ extern "C" static int get_num_elements(void *data, int *ierr){
   return dist_graph->n_local;
 }
 
-extern "C" static void get_elements(void *data, int num_gid_entries, int num_lid_entries,
+extern "C" void get_elements(void *data, int num_gid_entries, int num_lid_entries,
                                     ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
                                     int wdim, float *wgt, int *ierr){
   color_dist_graph_t* dist_graph;
@@ -131,7 +136,7 @@ extern "C" static void get_elements(void *data, int num_gid_entries, int num_lid
   *ierr = ZOLTAN_OK;
 }
 
-extern "C" static void get_num_edges_list(void *data, int num_gid_entries, int num_lid_entries,
+extern "C" void get_num_edges_list(void *data, int num_gid_entries, int num_lid_entries,
                                           int num_obj, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
                                           int *numEdges, int* ierr){
   color_dist_graph_t* dist_graph;
@@ -147,7 +152,7 @@ extern "C" static void get_num_edges_list(void *data, int num_gid_entries, int n
   }
 }
 
-extern "C" static void get_edge_list(void *data, int num_gid_entries, int num_lid_entries,
+extern "C" void get_edge_list(void *data, int num_gid_entries, int num_lid_entries,
                                      int num_obj, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
                                      int* num_edges,
                                      ZOLTAN_ID_PTR nbor_global_id, int *nbor_procs,
@@ -228,6 +233,7 @@ int validateDistributedColoring(RCP<SparseMatrix> A, int *color, int rank){
     for (Teuchos_Ordinal j = 0; j < indices.size(); j++) {
       //std::cout<<"Debug: checking for conflict between vertex "<<rowMap->getGlobalElement(i)<<"(colored "<<color[i]<<") and vertex "<<colMap->getGlobalElement(indices[j])<<"(colored "<<colorData[indices[j]]<<")\n";
       if ((indices[j] != i) && (color[i] == colorData[indices[j]])){
+	std::cout<<rank<<": Found conflict between vertex "<<rowMap->getGlobalElement(i)<<"(colored "<<color[i]<<") and vertex "<<colMap->getGlobalElement(indices[j])<<"(colored "<<colorData[indices[j]]<<")\n";
         nconflicts++;
       }
     }
@@ -332,7 +338,7 @@ int main(int narg, char** arg)
   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
   int me = comm->getRank();
 
-  if (me == 0) std::cout << "Starting everything" << std::endl;
+  if (me == 0) std::cout << "Starting everything, size of zlno_t:" <<sizeof(zlno_t)<<" size of zgno_t:"<<sizeof(zgno_t) <<std::endl;
   // Read run-time options.
   Teuchos::CommandLineProcessor cmdp (false, false);
   cmdp.setOption("colorMethod", &colorAlg,
@@ -404,6 +410,7 @@ int main(int narg, char** arg)
   RCP<UserInputForTests> uinput;
   RCP<SparseMatrix> Matrix;
   RCP<CrsGraph> crs_graph;
+  RCP<myAdapter> graph_adapter;
   if(inputFile.find("ebin") != string::npos){//we're dealing with a binary file
     procid = comm->getRank();
     nprocs = comm->getSize();
@@ -492,6 +499,7 @@ int main(int narg, char** arg)
         relabel_edges(dist_graph);
       }
     }
+    graph_adapter = rcp(new myAdapter(dist_graph));
     Tpetra::global_size_t globalVtx = dist_graph->n;
     std::vector<map_t::global_ordinal_type> gids;
     for(int i = 0; i < dist_graph->n_local; i++) {
@@ -557,7 +565,7 @@ int main(int narg, char** arg)
       }
       return 0;
     }
-    delete dist_graph;
+    //delete dist_graph;
     //Matrix = readBinaryFile<SparseMatrix>(inputFile,comm,true,false);
   } else { 
     if (inputFile != ""){ // Input file specified; read a matrix
@@ -634,90 +642,95 @@ int main(int narg, char** arg)
   //params.set("balance_colors", balanceColors); // TODO
 
   ////// Create an input adapter for the Tpetra matrix.
-  std::cout<<comm->getRank()<<": creating SparseMatrixAdapter\n";
-  SparseMatrixAdapter adapter(Matrix);
-  std::cout<<comm->getRank()<<": done creating adapter\n";
+  //std::cout<<comm->getRank()<<": creating SparseMatrixAdapter\n";
+  //SparseMatrixAdapter adapter(Matrix);
+  //std::cout<<comm->getRank()<<": done creating adapter\n";
 
   ////// Create and solve ordering problem
-  try
-  {
-  std::cout<<comm->getRank()<<": creating a coloring problem\n";
-  Zoltan2::ColoringProblem<SparseMatrixAdapter> problem(&adapter, &params);
-  std::cout<<comm->getRank()<<": done creating a coloring problem\n";
-  if(comm->getRank()==0) std::cout << "Going to color" << std::endl;
-  //cudaProfilerStart();
-  problem.solve();
-  //cudaProfilerStop();
-  ////// Basic metric checking of the coloring solution
-  size_t checkLength;
-  int *checkColoring = nullptr;
-  Zoltan2::ColoringSolution<SparseMatrixAdapter> *soln = problem.getSolution();
+  //repeat 5 times
+  int repeat = 5;
+  for(int i = 0; i < repeat; i++){
 
-  if(comm->getRank()==0) std::cout << "Going to get results" << std::endl;
-  // Check that the solution is really a coloring
-  checkLength = soln->getColorsSize();
-  if(checkLength >0){
-    checkColoring = soln->getColors();
-    /*for(int i = 0; i <checkLength; i++){
-      std::cout<<"local vertex "<<i+1<<" is colored "<<checkColoring[i]<<"\n";
-    }*/
-  }
-  
-  if (outputFile != "") {
-    std::ofstream colorFile;
+    try
+    {
+    std::cout<<comm->getRank()<<": creating a coloring problem\n";
+    Zoltan2::ColoringProblem<myAdapter> problem(&(*graph_adapter), &params);
+    std::cout<<comm->getRank()<<": done creating a coloring problem\n";
+    if(comm->getRank()==0) std::cout << "Going to color" << std::endl;
+    //cudaProfilerStart();
+    problem.solve();
+    //cudaProfilerStop();
+    ////// Basic metric checking of the coloring solution
+    size_t checkLength;
+    int *checkColoring = nullptr;
+    Zoltan2::ColoringSolution<myAdapter> *soln = problem.getSolution();
 
-    // Write coloring to file,
-    // each process writes local coloring to a separate file
-    //std::string fname = outputFile + "." + me;
-    std::stringstream fname;
-    fname << outputFile << "." << comm->getSize() << "." << me;
-    colorFile.open(fname.str().c_str());
-    for (size_t i=0; i<checkLength; i++){
-      colorFile << " " << checkColoring[i] << std::endl;
+    if(comm->getRank()==0) std::cout << "Going to get results" << std::endl;
+    // Check that the solution is really a coloring
+    checkLength = soln->getColorsSize();
+    if(checkLength >0){
+      checkColoring = soln->getColors();
+      /*for(int i = 0; i <checkLength; i++){
+        std::cout<<"local vertex "<<i+1<<" is colored "<<checkColoring[i]<<"\n";
+      }*/
     }
-    colorFile.close();
-  }
-  
-  // Print # of colors on each proc.
-  //if(checkLength>0) std::cout << "No. of colors on proc " << me << " : " << soln->getNumColors() << std::endl;
-  if(checkLength>0){
-    localColors = soln->getNumColors();
-  }
-  
-  //colors are guaranteed to overlap, max will discard duplicates
-  Teuchos::reduceAll<int,int>(*comm, Teuchos::REDUCE_MAX,1,&localColors,&totalColors);
-  
-  std::cout << "Going to validate the soln" << std::endl;
-  // Verify that checkColoring is a coloring
-  if(colorAlg=="D2"){
-    testReturn = validateDistributedDistance2Coloring(*Matrix,checkColoring,me);
-    //testReturn += validateDistributedColoring(Matrix,checkColoring,me);
-  }else if(colorAlg=="2GL" ||colorAlg == "Hybrid"){
-    //need to check a distributed coloring
-    testReturn = validateDistributedColoring(Matrix, checkColoring, me);
-  } else if (checkLength > 0){
-    testReturn = validateColoring(Matrix, checkColoring);
-  }
-    // Check balance (not part of pass/fail for now)
-  if(checkLength > 0) checkBalance((zlno_t)checkLength, checkColoring);
-  
-  } catch (std::exception &e){
-      std::cout << "Exception caught in coloring" << std::endl;
-      std::cout << e.what() << std::endl;
-      std::cout << "FAIL" << std::endl;
-      return 0;
-  }
-  int numGlobalConflicts = 0;
-  Teuchos::reduceAll<int,int>(*comm, Teuchos::REDUCE_MAX,1,&testReturn,&numGlobalConflicts);
-  if (me == 0) {
-    if (numGlobalConflicts > 0) {
-      std::cout << "Number of conflicts found = " << numGlobalConflicts
-                << std::endl;
-      std::cout << "Solution is not a valid coloring; FAIL" << std::endl;
+    
+    if (outputFile != "") {
+      std::ofstream colorFile;
+
+      // Write coloring to file,
+      // each process writes local coloring to a separate file
+      //std::string fname = outputFile + "." + me;
+      std::stringstream fname;
+      fname << outputFile << "." << comm->getSize() << "." << me;
+      colorFile.open(fname.str().c_str());
+      for (size_t i=0; i<checkLength; i++){
+        colorFile << " " << checkColoring[i] << std::endl;
+      }
+      colorFile.close();
     }
-    else{
-      std::cout << "Used " <<totalColors<< " colors\n"; 
-      std::cout << "PASS" << std::endl;
+    
+    // Print # of colors on each proc.
+    //if(checkLength>0) std::cout << "No. of colors on proc " << me << " : " << soln->getNumColors() << std::endl;
+    if(checkLength>0){
+      localColors = soln->getNumColors();
+    }
+    
+    //colors are guaranteed to overlap, max will discard duplicates
+    Teuchos::reduceAll<int,int>(*comm, Teuchos::REDUCE_MAX,1,&localColors,&totalColors);
+    
+    std::cout << "Going to validate the soln" << std::endl;
+    // Verify that checkColoring is a coloring
+    if(colorAlg=="D2"){
+      testReturn = validateDistributedDistance2Coloring(*Matrix,checkColoring,me);
+      //testReturn += validateDistributedColoring(Matrix,checkColoring,me);
+    }else if(colorAlg=="2GL" ||colorAlg == "Hybrid"){
+      //need to check a distributed coloring
+      testReturn = validateDistributedColoring(Matrix, checkColoring, me);
+    } else if (checkLength > 0){
+      testReturn = validateColoring(Matrix, checkColoring);
+    }
+      // Check balance (not part of pass/fail for now)
+    if(checkLength > 0) checkBalance((zlno_t)checkLength, checkColoring);
+    
+    } catch (std::exception &e){
+        std::cout << "Exception caught in coloring" << std::endl;
+        std::cout << e.what() << std::endl;
+        std::cout << "FAIL" << std::endl;
+        return 0;
+    }
+    int numGlobalConflicts = 0;
+    Teuchos::reduceAll<int,int>(*comm, Teuchos::REDUCE_MAX,1,&testReturn,&numGlobalConflicts);
+    if (me == 0) {
+      if (numGlobalConflicts > 0) {
+        std::cout << "Number of conflicts found = " << numGlobalConflicts
+                  << std::endl;
+        std::cout << "Solution is not a valid coloring; FAIL" << std::endl;
+      }
+      else{
+        std::cout << "Used " <<totalColors<< " colors\n"; 
+        std::cout << "PASS" << std::endl;
+      }
     }
   }
 }
