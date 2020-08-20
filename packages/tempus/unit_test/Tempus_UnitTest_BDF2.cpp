@@ -88,14 +88,12 @@ namespace Tempus_Unit_Test {
 
 #ifndef TEMPUS_HIDE_DEPRECATED_CODE
     // Full argument list construction.
-    stepper = rcp(new Tempus::StepperBDF2<double>(
-						  model, obs, solver, startUpStepper, useFSAL,
-						  ICConsistency, ICConsistencyCheck, zeroInitialGuess));
+    stepper = rcp(new Tempus::StepperBDF2<double>(model, obs, solver, startUpStepper, useFSAL,
+						    ICConsistency, ICConsistencyCheck, zeroInitialGuess));
     TEUCHOS_TEST_FOR_EXCEPT(!stepper->isInitialized());
 #endif
-    stepper = rcp(new Tempus::StepperBDF2<double>(
-						  model, solver, startUpStepper, useFSAL,
-						  ICConsistency, ICConsistencyCheck, zeroInitialGuess,modifier));
+    stepper = rcp(new Tempus::StepperBDF2<double>(model, solver, startUpStepper, useFSAL,
+						    ICConsistency, ICConsistencyCheck, zeroInitialGuess,modifier));
     TEUCHOS_TEST_FOR_EXCEPT(!stepper->isInitialized());
     // Test stepper properties.
     TEUCHOS_ASSERT(stepper->getOrder() == 2);
@@ -120,8 +118,8 @@ public:
 
   /// Constructor                                                                                                   
   StepperBDF2ModifierTest()
-    : testBEFORE_SOLVE(false),testAFTER_SOLVE(false),
-      testBEGIN_STEP(false),testEND_STEP(false),
+    : testBEGIN_STEP(false),testBEFORE_SOLVE(false),
+      testAFTER_SOLVE(false),testEND_STEP(false),
       testCurrentValue(-0.99), testWorkingValue(-0.99),
       testDt(.99), testType("")
   {}
@@ -167,9 +165,9 @@ public:
                                  "Error - unknown action location.\n");
     }
   } 
+  bool testBEGIN_STEP;
   bool testBEFORE_SOLVE;
   bool testAFTER_SOLVE;
-  bool testBEGIN_STEP;
   bool testEND_STEP;
   double testCurrentValue;
   double testWorkingValue;
@@ -249,8 +247,8 @@ public:
 
   /// Constructor                                                                                                   
   StepperBDF2ObserverTest()
-    : testBEFORE_SOLVE(false),testAFTER_SOLVE(false),
-      testBEGIN_STEP(false),testEND_STEP(false),
+    : testBEGIN_STEP(false),testBEFORE_SOLVE(false),
+      testAFTER_SOLVE(false),testEND_STEP(false),
       testCurrentValue(0.99), testWorkingValue(0.99),
       testDt(.99), testType("")
   {}
@@ -378,8 +376,8 @@ public:
 
   /// Constructor                                                                                                   
   StepperBDF2ModifierXTest()
-    : testX_BEGIN_STEP(false),testXDOT_END_STEP(false),
-      testX_BEFORE_SOLVE(false),testX_AFTER_SOLVE(false),
+    : testX_BEGIN_STEP(false),testX_BEFORE_SOLVE(false),
+      testXDOT_END_STEP(false),testX_AFTER_SOLVE(false),
       testX(-.99),testXDot(-.99),testTime(0.0),testDt(0.0)
   {}
 
@@ -423,9 +421,9 @@ public:
     }
   }
   bool testX_BEGIN_STEP;
-  bool testXDOT_END_STEP;
   bool testX_BEFORE_SOLVE;
   bool testX_AFTER_SOLVE;
+  bool testXDOT_END_STEP;
   double testX;
   double testXDot;
   double testTime;
