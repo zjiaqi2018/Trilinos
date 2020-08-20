@@ -156,8 +156,8 @@ public:
     }
   }
   bool testBEGIN_STEP;
-  bool testBEFORE_EXPLICIT_EVAL;
   bool testBEFORE_X_UPDATE;
+  bool testBEFORE_EXPLICIT_EVAL;
   bool testBEFORE_XDOT_UPDATE;
   double testCurrentValue;
   double testWorkingValue;
