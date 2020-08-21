@@ -220,7 +220,7 @@ TEUCHOS_UNIT_TEST(Leapfrog, AppAction_Modifier)
   TEST_FLOATING_EQUALITY(modifier->testDt, Dt, 1.0e-15);
 
   TEST_COMPARE(modifier->testType, ==, "Leapfrog - Modifier");
-};
+}
 // ************************************************************                                                                                       
 // ************************************************************                                                                                       
 class StepperLeapfrogModifierXTest
@@ -339,7 +339,7 @@ TEUCHOS_UNIT_TEST(LeapFrog, AppAction_ModifierX)
   TEST_FLOATING_EQUALITY(modifierX->testTime, time, 1.0e-15);
   TEST_COMPARE(modifierX->testType, ==, "Leapfrog - ModifierX");
 
-};
+}
 
 // ************************************************************                                                 
 // ************************************************************                                           
