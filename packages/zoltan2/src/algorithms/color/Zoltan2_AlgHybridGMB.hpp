@@ -175,7 +175,9 @@ class AlgHybridGMB : public Algorithm<Adapter>
                          size_t nVtx,
 			 Teuchos::ArrayView<const offset_t> offsets,
 			 Teuchos::ArrayView<const lno_t> adjs,
-                         const std::vector<lno_t>& verts_to_send,
+                         //const std::vector<lno_t>& verts_to_send,
+			 Kokkos::View<lno_t*,device_type> verts_to_send,
+			 Kokkos::View<lno_t[1],device_type> verts_to_send_size,
                          ArrayView<int> owners,
                          Kokkos::View<int*, device_type>& colors){
       //std::vector<int> sendcounts(comm->getSize(), 0);
@@ -191,10 +193,10 @@ class AlgHybridGMB : public Algorithm<Adapter>
       /*for(size_t i=0; i < verts_to_send.size(); i++){
         if(owners[verts_to_send[i]-nVtx] != comm->getRank() && owners[verts_to_send[i]-nVtx] != -1) sendcnts[owners[verts_to_send[i]-nVtx]]++;
       }*/
-      for(size_t i=0; i < verts_to_send.size(); i++){
+      for(size_t i=0; i < verts_to_send_size(0); i++){
 	bool used_proc[nprocs];
 	for(int x = 0; x < nprocs; x++) used_proc[x] = false;
-        for(offset_t j = offsets[verts_to_send[i]]; j < offsets[verts_to_send[i]+1]; j++){
+        for(offset_t j = offsets[verts_to_send(i)]; j < offsets[verts_to_send(i)+1]; j++){
 	  lno_t nbor = adjs[j];
 	  if(nbor >= nVtx){
 	    //one for the GID, one for the color, two overall.
@@ -224,7 +226,7 @@ class AlgHybridGMB : public Algorithm<Adapter>
         sendsize += sendcnts[i-1];
         recvsize += recvcnts[i-1];
         sentcount[i-1] = 0;
-        //std::cout<<comm->getRank()<<": sending "<<sendcnts[i-1]<<" GIDs to proc "<<i-1<<"\n";
+        //std::cout<<comm->getRank()<<": sending "<<sendcnts[i-1]/2<<" GIDs to proc "<<i-1<<"\n";
       }
       int* sendbuf = new int[sendsize];
       int* recvbuf = new int[recvsize];
@@ -235,11 +237,11 @@ class AlgHybridGMB : public Algorithm<Adapter>
           sendbuf[idx] = mapOwnedPlusGhosts->getGlobalElement(verts_to_send[i]);
         }
       }*/
-      for(size_t i = 0; i < verts_to_send.size(); i++){
+      for(size_t i = 0; i < verts_to_send_size(0); i++){
 	bool used_proc[nprocs];
 	for(int x = 0; x < nprocs; x++) used_proc[x] = false;
-	lno_t curr_vert = verts_to_send[i];
-        for(offset_t j = offsets[verts_to_send[i]]; j < offsets[verts_to_send[i]+1]; j++){
+	lno_t curr_vert = verts_to_send(i);
+        for(offset_t j = offsets[verts_to_send(i)]; j < offsets[verts_to_send(i)+1]; j++){
 	  lno_t nbor = adjs[j];
 	  if(nbor >= nVtx){
 	    if(owners[nbor-nVtx] != comm->getRank() && owners[nbor-nVtx] != -1){
@@ -250,9 +252,9 @@ class AlgHybridGMB : public Algorithm<Adapter>
 	        //build up the sendbuf
 	        sendbuf[idx++] = mapOwnedPlusGhosts->getGlobalElement(curr_vert);
 	        sendbuf[idx] = colors(curr_vert);
-		if(mapOwnedPlusGhosts->getGlobalElement(curr_vert) == 102757 || mapOwnedPlusGhosts->getGlobalElement(curr_vert) == 471918){
+		/*if(mapOwnedPlusGhosts->getGlobalElement(curr_vert) == 102757 || mapOwnedPlusGhosts->getGlobalElement(curr_vert) == 471918){
 		  std::cout<<comm->getRank()<<": sending global vert "<<mapOwnedPlusGhosts->getGlobalElement(curr_vert)<<" with color "<<colors(curr_vert)<<" to proc "<<owners[nbor-nVtx]<<"\n";
-		}
+		}*/
 		used_proc[owners[nbor-nVtx]] = true;
 	      }
 	    }
@@ -269,9 +271,9 @@ class AlgHybridGMB : public Algorithm<Adapter>
 
       for(int i = 0; i < comm->getSize(); i++){
         for(int j = rdispls[i]; j < rdispls[i+1]; j+=2){
-	  if(recvbuf[j] == 102757 || recvbuf[j] == 471918){
+	  /*if(recvbuf[j] == 102757 || recvbuf[j] == 471918){
 	    std::cout<<comm->getRank()<<": received global vert "<<recvbuf[j]<<" with color "<<recvbuf[j+1]<<" \n";
-	  }
+	  }*/
           lno_t lid = mapOwnedPlusGhosts->getLocalElement(recvbuf[j]);
 	  if(lid < nVtx) std::cout<<comm->getRank()<<": received a locally owned vertex, somehow\n";
           //recvbuf[j] = colors(lid);
@@ -590,6 +592,41 @@ class AlgHybridGMB : public Algorithm<Adapter>
       std::cout<<comm->getRank()<<": done creating recoloring datastructures, begin initial recoloring\n";
       std::vector<lno_t> verts_to_send; 
       std::vector<lno_t> verts_to_req;
+      std::vector<int> last_colors;
+      std::vector<lno_t> inst_to_send;
+      std::vector<lno_t> inst_to_req;
+      std::vector<int> ghost_colors;
+      offset_t boundary_size = 0;
+      for(offset_t i = 0; i < nVtx; i++){
+        for(offset_t j = offsets[i]; j < offsets[i+1]; j++){
+          if(adjs[j] >= nVtx) {
+            boundary_size++;
+	    verts_to_send.push_back(i);
+            break;
+          }
+        }
+      }
+      std::cout<<comm->getRank()<<": creating send views\n";
+      Kokkos::View<lno_t*, device_type> verts_to_send_view("verts to send",boundary_size);
+      Kokkos::parallel_for(boundary_size, KOKKOS_LAMBDA(const int& i){
+        verts_to_send_view(i) = -1;
+      });
+      Kokkos::View<lno_t*, device_type, Kokkos::MemoryTraits<Kokkos::Atomic>> verts_to_send_atomic = verts_to_send_view;
+      
+      Kokkos::View<int[1], device_type> verts_to_send_size("verts to send size");
+      verts_to_send_size(0) = 0;
+      Kokkos::View<int[1], device_type, Kokkos::MemoryTraits<Kokkos::Atomic> > verts_to_send_size_atomic = verts_to_send_size;
+      std::cout<<comm->getRank()<<": Done creating send views, initializing...\n";
+      std::cout<<comm->getRank()<<": boundary_size = "<<boundary_size<<" verts_to_send_size_atomic(0) = "<<verts_to_send_size_atomic(0)<<"\n";
+      Kokkos::parallel_for(nVtx, KOKKOS_LAMBDA(const int&i){
+        for(offset_t j = dist_offsets(i); j < dist_offsets(i+1); j++){
+	  if(dist_adjs(j) >= nVtx){
+	    verts_to_send_atomic(verts_to_send_size_atomic(0)++) = i;
+	    break;
+	  }
+	} 
+      });
+      std::cout<<comm->getRank()<<": Done initializing\n";
       //bootstrap distributed coloring, add conflicting vertices to the recoloring queue.
       if(comm->getSize() > 1){
         comm->barrier();
@@ -598,24 +635,34 @@ class AlgHybridGMB : public Algorithm<Adapter>
 	/*for(size_t i = 0; i < femv_colors.size(); i++){
 	  std::cout<<comm->getRank()<<": after initial coloring, vertex "<<mapOwnedPlusGhosts->getGlobalElement(i)<<" is color "<<femv_colors[i]<<"\n";
 	}*/
-        for(offset_t i = 0; i < nVtx; i++){
-	  for(offset_t j = offsets[i]; j < offsets[i+1]; j++){
-            if(adjs[j] >= nVtx) {
-	      verts_to_send.push_back(i);
-	      break;
-	    }
-	  }
-        }
-	for(offset_t i = nVtx; i < rand.size(); i++){
+        /*for(int i = 0; i < verts_to_send.size(); i++){
+          if(femv_colors(verts_to_send[i]) != 0) inst_to_send.push_back(verts_to_send[i]);
+        }*/
+	/*for(offset_t i = nVtx; i < rand.size(); i++){
 	  verts_to_req.push_back(i);
-	}
-        std::cout<<comm->getRank()<<": verts_to_send.size() = "<<verts_to_send.size()<<"\n";
+	  inst_to_req.push_back(i);
+	}*/
+        std::cout<<comm->getRank()<<": verts_to_send.size() = "<<verts_to_send.size()<<" verts_to_send_size = "<<verts_to_send_size(0)<<"\n";
         //femv->switchActiveMultiVector();
         //double comm_temp = timer();
+        comm_time = doOwnedToGhosts(mapOwnedPlusGhosts,nVtx,offsets,adjs,/*inst_to_send*/verts_to_send_view,verts_to_send_size, owners,femv_colors);
+	verts_to_send_size(0) = 0;
+	/*for(int i = 0; i < rand.size(); i++){
+	  last_colors.push_back(femv_colors(i));
+	}
         comm_time = doOwnedToGhosts(mapOwnedPlusGhosts,nVtx,offsets,adjs,verts_to_send, owners,femv_colors); 
+	for(int i = 0; i < rand.size(); i++){
+	  if(last_colors[i] != femv_colors(i)){
+	    std::cout<<comm->getRank()<<": vertex "<<mapOwnedPlusGhosts->getGlobalElement(i)<<" was color "<<last_colors[i]<<" with new comm, should be "<<femv_colors(i)<<"\n";
+	  }
+	}
+	last_colors.clear();*/
         //femv->doOwnedToOwnedPlusShared(Tpetra::REPLACE);
         //comm_time = timer() - comm_temp;
         total_time += comm_time;
+	for(offset_t i = nVtx; i < rand.size(); i++){
+	  ghost_colors.push_back(femv_colors(i));
+	}
         //std::cout<<comm->getRank()<<": Global vertex 471918(rand "<<rand[mapOwnedPlusGhosts->getLocalElement(471918)]<<") is color "<<femv_colors(mapOwnedPlusGhosts->getLocalElement(471918))<<"\n";
         //std::cout<<comm->getRank()<<": Global vertex 102757(rand "<<rand[mapOwnedPlusGhosts->getLocalElement(102757)]<<") is color "<<femv_colors(mapOwnedPlusGhosts->getLocalElement(102757))<<"\n";
         //verts_to_send.clear();
@@ -648,6 +695,7 @@ class AlgHybridGMB : public Algorithm<Adapter>
             }
           }
         });*/
+	verts_to_send.clear();
         comm->barrier();
         double temp = timer();
         Kokkos::parallel_for(nVtx, KOKKOS_LAMBDA (const int& i){
@@ -658,7 +706,8 @@ class AlgHybridGMB : public Algorithm<Adapter>
               if(rand_dev(i) > rand_dev(dist_adjs(j))){
                 femv_colors(i) = 0;
                 recoloringSize_atomic(0)++;
-                //break;
+		verts_to_send_atomic(verts_to_send_size_atomic(0)++) = i;
+                break;
               } else if(rand_dev(dist_adjs(j)) > rand_dev(i)){
                 femv_colors(dist_adjs(j)) = 0;
                 recoloringSize_atomic(0)++;
@@ -666,7 +715,9 @@ class AlgHybridGMB : public Algorithm<Adapter>
                 if (gid_dev(i) >= gid_dev(dist_adjs(j))){
                   femv_colors(i) = 0;
                   recoloringSize_atomic(0)++;
-                  //break;
+		  verts_to_send_atomic(verts_to_send_size_atomic(0)++) = i;
+		  //verts_to_send.push_back(i);
+                  break;
                 } else {
                   femv_colors(dist_adjs(j)) = 0;
                   recoloringSize_atomic(0)++;
@@ -698,7 +749,6 @@ class AlgHybridGMB : public Algorithm<Adapter>
       recoloringPerRound[0] = 0;
       vertsPerRound[0] = 0;
       int distributedRounds = 1; //this is the same across all processors
-      std::vector<int> last_colors;
       //while the queue is not empty
       while(recoloringSize(0) > 0 || !done){
         //get a subview of the colors:
@@ -712,23 +762,19 @@ class AlgHybridGMB : public Algorithm<Adapter>
           }
           vertsPerRound[distributedRounds] = localVertsToRecolor;//recoloringSize(0);
         }
-	/*std::vector<lno_t> inst_to_send;
-	for(int i = 0; i < verts_to_send.size(); i++){
-	  if(femv_colors(verts_to_send[i]) != 0) inst_to_send.push_back(verts_to_send[i]);
-	}
-	std::vector<lno_t> inst_to_req;
+	/*inst_to_req.clear();
 	for(int i = 0; i < verts_to_req.size(); i++){
-	  if(femv_colors(verts_to_send[i]) != 0) inst_to_req.push_back(verts_to_req[i]);
+	  if(femv_colors(verts_to_req[i]) == 0) inst_to_req.push_back(verts_to_req[i]);
 	}*/
-        for(auto iter = verts_to_send.begin();iter != verts_to_send.end(); iter++){
+        /*for(auto iter = inst_to_send.begin();iter != inst_to_send.end(); iter++){
           //remove any local vertex that will not be recolored anymore.
-          if(femv_colors(*iter) != 0) verts_to_send.erase(iter--); 
-        }
-	for(auto iter = verts_to_req.begin(); iter != verts_to_req.end(); iter++){
-	  if(femv_colors(*iter) != 0) verts_to_req.erase(iter--);
-	}
+          if(femv_colors(*iter) != 0) inst_to_send.erase(iter--); 
+        }*/
+	/*for(auto iter = inst_to_req.begin(); iter != inst_to_req.end(); iter++){
+	  if(femv_colors(*iter) != 0) inst_to_req.erase(iter--);
+	}*/
 	//if(verts_to_send.size() == 0) verts_to_req.clear();
-	/*verts_to_send.clear();
+	verts_to_send.clear();
         for(offset_t i = 0; i < nVtx; i++){
 	  for(offset_t j = offsets[i]; j < offsets[i+1]; j++){
             if(adjs[j] >= nVtx) {
@@ -736,10 +782,17 @@ class AlgHybridGMB : public Algorithm<Adapter>
 	      break;
 	    }
 	  }
-        }*/
-	for(offset_t i = 0; i < nVtx; i++){
-	  last_colors.push_back(femv_colors(i));
+        }
+        std::cout<<comm->getRank()<<": verts_to_send.size() = "<<verts_to_send.size()<<" verts_to_send_size = "<<verts_to_send_size(0)<<"\n";
+	int recolored_local = 0;
+	int recolored_ghost = 0;
+	for(offset_t i = 0; i < femv_colors.size(); i++){
+	  if(femv_colors(i) == 0){
+	    if(i < nVtx) recolored_local++;
+	    else recolored_ghost++;
+	  }
 	}
+	//std::cout<<comm->getRank()<<": after conflict detection, vertex 901591 is color "<<femv_colors(mapOwnedPlusGhosts->getLocalElement(901591))<<"\n";
         std::cout<<comm->getRank()<<": verts_to_send.size() = "<<verts_to_send.size()<<"\n";
         std::cout<<comm->getRank()<<": starting to recolor\n";
         comm->barrier();
@@ -756,7 +809,8 @@ class AlgHybridGMB : public Algorithm<Adapter>
         compPerRound[distributedRounds] = recoloringPerRound[distributedRounds];
         totalPerRound[distributedRounds] = recoloringPerRound[distributedRounds];
         std::cout<<comm->getRank()<<": done recoloring\n";
-	int nonzero_changed = 0;
+	//std::cout<<comm->getRank()<<": after recoloring, vertex 901591 is color "<<femv_colors(mapOwnedPlusGhosts->getLocalElement(901591))<<"\n";
+	/*int nonzero_changed = 0;
 	int nonzero_lessened = 0;
 	int zero_changed = 0;
         for(lno_t i = 0; i < nVtx; i++){
@@ -772,20 +826,61 @@ class AlgHybridGMB : public Algorithm<Adapter>
 	  }
           //std::cout<<comm->getRank()<<": global vert "<< reorderGIDs[i] <<" is color "<< femv_colors(i)<<"\n";
         }
-        std::cout<<comm->getRank()<<": ******"<<nonzero_changed<<" nonzero changes, "<<nonzero_lessened<<" nonzero colors lessened, " <<zero_changed<<" zero colors changed*******\n";
-	last_colors.clear();
+        std::cout<<comm->getRank()<<": ******"<<nonzero_changed<<" nonzero changes, "<<nonzero_lessened<<" nonzero colors lessened, " <<zero_changed<<" zero colors changed*******\n";*/
+	//last_colors.clear();
+	for(int i = nVtx; i < rand.size(); i++){
+	  /*if(mapOwnedPlusGhosts->getGlobalElement(i) == 901591){
+	    std::cout<<comm->getRank()<<": vertex 901591 was recolored with color "<<femv_colors(i)<<", but its previous color "<<ghost_colors[i-nVtx]<<" replaced it.\n";
+	  }*/
+	  femv_colors(i) = ghost_colors[i-nVtx];
+	}
         recoloringSize(0) = 0;
         //communicate
         comm->barrier();
         //femv->switchActiveMultiVector();
         double comm_temp = timer();
         //femv->doOwnedToOwnedPlusShared(Tpetra::REPLACE);
-        commPerRound[distributedRounds] = doOwnedToGhosts(mapOwnedPlusGhosts,nVtx,offsets,adjs,verts_to_send,owners,femv_colors); 
-	commPerRound[distributedRounds] += doGhostUpdate(mapOwnedPlusGhosts,nVtx,verts_to_req,owners,femv_colors);
+	//comm_time = doGhostUpdate(mapOwnedPlusGhosts,nVtx,inst_to_req,owners,femv_colors);
+        commPerRound[distributedRounds] = doOwnedToGhosts(mapOwnedPlusGhosts,nVtx,offsets,adjs,verts_to_send_view, verts_to_send_size, owners,femv_colors); 	
+	verts_to_send_size(0) = 0;
+	//std::cout<<comm->getRank()<<": after new comm, vertex 901591 is color "<<femv_colors(mapOwnedPlusGhosts->getLocalElement(901591))<<"\n";
+
+	/*for(int i = 0; i < rand.size(); i++){
+	  last_colors.push_back(femv_colors(i));
+	}*/
+        //commPerRound[distributedRounds] = doOwnedToGhosts(mapOwnedPlusGhosts,nVtx,offsets,adjs,verts_to_send,owners,femv_colors); 
+	/*commPerRound[distributedRounds] = doGhostUpdate(mapOwnedPlusGhosts,nVtx,verts_to_req,owners,femv_colors);
+	std::cout<<comm->getRank()<<": after old comm, vertex 901591 is color "<<femv_colors(mapOwnedPlusGhosts->getLocalElement(901591))<<"\n";
+	offset_t missing[comm->getSize()];
+	for(int i = 0; i < comm->getSize(); i++) missing[i] = 0;
+	for(int i = 0; i < rand.size(); i++){
+	  if(last_colors[i] != femv_colors(i)){
+	    missing[owners[i-nVtx]]++;
+	    std::cout<<comm->getRank()<<": vertex "<<mapOwnedPlusGhosts->getGlobalElement(i)<<" was color "<<last_colors[i]<<" with new comm, should be "<<femv_colors(i)<<"\n";
+	  }
+	}
+	offset_t missing_total = 0;
+	for(int i = 0; i < comm->getSize(); i++){
+	  std::cout<<comm->getRank()<<": *****Missing "<<missing[i]<<" vertices from rank "<<i<<"*****\n";
+	  missing_total += missing[i];
+	}
+        std::cout<<comm->getRank()<<": *****Total missing "<<missing_total<<", total verts recolored "<<recolored_local<<", total ghosts recolored "<<recolored_ghost<<", total sent "<<inst_to_send.size()<<", total requested "<<inst_to_req.size()<<"*****\n";*/
+	last_colors.clear();
+	//commPerRound[distributedRounds] += doGhostUpdate(mapOwnedPlusGhosts,nVtx,verts_to_req,owners,femv_colors);
         commPerRound[distributedRounds] = timer() - comm_temp;
         comm_time += commPerRound[distributedRounds];
         totalPerRound[distributedRounds] += commPerRound[distributedRounds];
         total_time += commPerRound[distributedRounds];
+	ghost_colors.clear();
+	for(offset_t i = nVtx; i < rand.size(); i++){
+	  /*if(mapOwnedPlusGhosts->getGlobalElement(i) == 901591){
+	    std::cout<<comm->getRank()<<": vertex 901591 old color is saved as "<<femv_colors(i)<<"\n";
+	  }*/
+	  ghost_colors.push_back(femv_colors(i));
+	}
+	//for(offset_t i = nVtx; i < rand.size(); i++){
+	//  last_colors.push_back(femv_colors(i));
+	//}
         //std::cout<<comm->getRank()<<": Global vertex 471918(rand "<<rand[mapOwnedPlusGhosts->getLocalElement(471918)]<<") is color "<<femv_colors(mapOwnedPlusGhosts->getLocalElement(471918))<<"\n";
         //std::cout<<comm->getRank()<<": Global vertex 102757(rand "<<rand[mapOwnedPlusGhosts->getLocalElement(102757)]<<") is color "<<femv_colors(mapOwnedPlusGhosts->getLocalElement(102757))<<"\n";
         //verts_to_send.clear();
@@ -815,6 +910,7 @@ class AlgHybridGMB : public Algorithm<Adapter>
             }
           }
         });*/
+	verts_to_send.clear();
         comm->barrier();
         double detection_temp = timer();
         Kokkos::parallel_for(nVtx, KOKKOS_LAMBDA (const int& i){
@@ -825,7 +921,9 @@ class AlgHybridGMB : public Algorithm<Adapter>
               if(rand_dev(i) > rand_dev(dist_adjs(j))){
                 femv_colors(i) = 0;
                 recoloringSize_atomic(0)++;
-                //break;
+		verts_to_send_atomic(verts_to_send_size_atomic(0)++) = i;
+		//verts_to_send.push_back(i);
+                break;
               } else if(rand_dev(dist_adjs(j)) > rand_dev(i)){
                 femv_colors(dist_adjs(j)) = 0;
                 recoloringSize_atomic(0)++;
@@ -833,7 +931,9 @@ class AlgHybridGMB : public Algorithm<Adapter>
                 if (gid_dev(i) >= gid_dev(dist_adjs(j))){
                   femv_colors(i) = 0;
                   recoloringSize_atomic(0)++;
-                  //break;
+		  verts_to_send_atomic(verts_to_send_size_atomic(0)++) = i;
+		  //verts_to_send.push_back(i);
+                  break;
                 } else {
                   femv_colors(dist_adjs(j)) = 0;
                   recoloringSize_atomic(0)++;

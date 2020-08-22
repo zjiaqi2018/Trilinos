@@ -648,7 +648,7 @@ int main(int narg, char** arg)
 
   ////// Create and solve ordering problem
   //repeat 5 times
-  int repeat = 5;
+  int repeat = 1;
   for(int i = 0; i < repeat; i++){
 
     try
