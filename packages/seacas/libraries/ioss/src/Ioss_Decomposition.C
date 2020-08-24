@@ -1,35 +1,9 @@
 /*
- * Copyright(C) 1999-2017, 2020 National Technology & Engineering Solutions
+ * Copyright(C) 1999-2020 National Technology & Engineering Solutions
  * of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
  * NTESS, the U.S. Government retains certain rights in this software.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *
- *     * Redistributions in binary form must reproduce the above
- *       copyright notice, this list of conditions and the following
- *       disclaimer in the documentation and/or other materials provided
- *       with the distribution.
- *
- *     * Neither the name of NTESS nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * See packages/seacas/LICENSE for details
  */
 
 #include <Ioss_Decomposition.h>
@@ -85,9 +59,9 @@ namespace {
     return dist;
   }
 
-  bool check_valid_decomp_method(const std::string &method) 
+  bool check_valid_decomp_method(const std::string &method)
   {
-    const auto& valid_methods = Ioss::valid_decomp_methods();
+    const auto &valid_methods = Ioss::valid_decomp_methods();
     if (std::find(valid_methods.begin(), valid_methods.end(), method) != valid_methods.end()) {
       return true;
     }
@@ -115,7 +89,8 @@ namespace {
       std::ostringstream errmsg;
       fmt::print(errmsg,
                  "ERROR: Invalid decomposition method specified: '{}'\n"
-                 "       Valid methods: {}\n", method, fmt::join(Ioss::valid_decomp_methods(), ", "));
+                 "       Valid methods: {}\n",
+                 method, fmt::join(Ioss::valid_decomp_methods(), ", "));
       IOSS_ERROR(errmsg);
     }
     return method;
@@ -172,15 +147,18 @@ namespace Ioss {
 
   const std::vector<std::string> &valid_decomp_methods()
   {
-    static const std::vector<std::string> valid_methods{
+    static const std::vector<std::string> valid_methods
+    {
       "LINEAR"
 #if !defined(NO_ZOLTAN_SUPPORT)
-	,"BLOCK", "CYCLIC", "RANDOM", "RCB", "RIB", "HSFC"
+          ,
+          "BLOCK", "CYCLIC", "RANDOM", "RCB", "RIB", "HSFC"
 #endif
 #if !defined(NO_PARMETIS_SUPPORT)
-	,"KWAY", "KWAY_GEOM", "GEOM_KWAY", "METIS_SFC"
+          ,
+          "KWAY", "KWAY_GEOM", "GEOM_KWAY", "METIS_SFC"
 #endif
-	};
+    };
     return valid_methods;
   }
 
@@ -200,6 +178,10 @@ namespace Ioss {
     Utils::check_set_bool_property(props, "DECOMP_SHOW_PROGRESS", m_showProgress);
     if (!m_showProgress) {
       Utils::check_set_bool_property(props, "ENABLE_TRACING", m_showProgress);
+    }
+
+    if (props.exists("PARMETIS_COMMON_NODE_COUNT") && props.get("PARMETIS_COMMON_NODE_COUNT").get_int() > 0) {
+      m_commonNodeCount = props.get("PARMETIS_COMMON_NODE_COUNT").get_int();
     }
   }
 
@@ -736,7 +718,7 @@ namespace Ioss {
     idx_t *elm_wgt      = nullptr;
     idx_t  ncon         = 1;
     idx_t  num_flag     = 0; // Use C-based numbering
-    idx_t  common_nodes = get_common_node_count(el_blocks, m_comm);
+    idx_t common_nodes = m_commonNodeCount > 0 ? m_commonNodeCount : get_common_node_count(el_blocks, m_comm);
 
     idx_t               nparts = m_processorCount;
     idx_t               ndims  = m_spatialDimension;
@@ -782,17 +764,17 @@ namespace Ioss {
       }
 
       if (sizeof(double) == sizeof(real_t)) {
-	rc = ParMETIS_V3_PartGeomKway(element_dist, dual_xadj, dual_adjacency, elm_wgt, elm_wgt,
-				      &wgt_flag, &num_flag, &ndims, (real_t *)m_centroids.data(),
-				      &ncon, &nparts, tp_wgts.data(), ub_vec.data(), options.data(),
-				      &edge_cuts, elem_partition, &m_comm);
+        rc = ParMETIS_V3_PartGeomKway(element_dist, dual_xadj, dual_adjacency, elm_wgt, elm_wgt,
+                                      &wgt_flag, &num_flag, &ndims, (real_t *)m_centroids.data(),
+                                      &ncon, &nparts, tp_wgts.data(), ub_vec.data(), options.data(),
+                                      &edge_cuts, elem_partition, &m_comm);
       }
       else {
-	std::vector<real_t> centroids(m_centroids.begin(), m_centroids.end());
-	rc = ParMETIS_V3_PartGeomKway(element_dist, dual_xadj, dual_adjacency, elm_wgt, elm_wgt,
-				      &wgt_flag, &num_flag, &ndims, centroids.data(),
-				      &ncon, &nparts, tp_wgts.data(), ub_vec.data(), options.data(),
-				      &edge_cuts, elem_partition, &m_comm);
+        std::vector<real_t> centroids(m_centroids.begin(), m_centroids.end());
+        rc = ParMETIS_V3_PartGeomKway(element_dist, dual_xadj, dual_adjacency, elm_wgt, elm_wgt,
+                                      &wgt_flag, &num_flag, &ndims, centroids.data(), &ncon,
+                                      &nparts, tp_wgts.data(), ub_vec.data(), options.data(),
+                                      &edge_cuts, elem_partition, &m_comm);
       }
 
 #if IOSS_DEBUG_OUTPUT
@@ -811,13 +793,12 @@ namespace Ioss {
     else if (m_method == "METIS_SFC") {
       int rc = METIS_OK;
       if (sizeof(double) == sizeof(real_t)) {
-	rc = ParMETIS_V3_PartGeom(element_dist, &ndims, (real_t *)m_centroids.data(),
-				  elem_partition, &m_comm);
+        rc = ParMETIS_V3_PartGeom(element_dist, &ndims, (real_t *)m_centroids.data(),
+                                  elem_partition, &m_comm);
       }
       else {
-	std::vector<real_t> centroids(m_centroids.begin(), m_centroids.end());
-	rc = ParMETIS_V3_PartGeom(element_dist, &ndims, centroids.data(),
-				  elem_partition, &m_comm);
+        std::vector<real_t> centroids(m_centroids.begin(), m_centroids.end());
+        rc = ParMETIS_V3_PartGeom(element_dist, &ndims, centroids.data(), elem_partition, &m_comm);
       }
 
       if (rc != METIS_OK) {
@@ -1244,7 +1225,7 @@ namespace Ioss {
     //
     // * iterate all local nodes (those that are in both file and ioss
     // decomposition)
-    //   on this procesor and all exported nodes,
+    //   on this processor and all exported nodes,
     // * put in a vector and sort on (id,proc).
     // * iterate and create a vector of all shared nodes and the
     //   processor they are on..

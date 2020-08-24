@@ -305,7 +305,7 @@ int InterpolationProjectionTri(const bool verbose) {
                   auto inView = Kokkos::subview( dofCoordsOriented,i,Kokkos::ALL(),Kokkos::ALL());
                   auto outView =Kokkos::subview( triLinearBasisValuesAtDofCoords,i,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
                   triLinearBasis.getValues(outView, inView);
-
+                  DeviceSpaceType().fence();
                   for(ordinal_type j=0; j<basisCardinality; ++j)
                     for(std::size_t k=0; k<tri.getNodeCount(); ++k)
                       physDofCoords(i,j,d) += vertices[tris[i][k]][d]*triLinearBasisValuesAtDofCoords(i,k,j);
@@ -342,7 +342,7 @@ int InterpolationProjectionTri(const bool verbose) {
               fst::HGRADtransformVALUE(transformedBasisValuesAtDofCoordsOriented,
                   basisValuesAtDofCoordsOriented);
 
-
+              DeviceSpaceType().fence();
               for(ordinal_type k=0; k<basisCardinality; ++k) {
                 for(ordinal_type j=0; j<basisCardinality; ++j){
                   ValueType dofValue = transformedBasisValuesAtDofCoordsOriented(i,k,j) * dofCoeffsPhys(i,j);
@@ -428,7 +428,6 @@ int InterpolationProjectionTri(const bool verbose) {
             }
           }
 
-#ifndef KOKKOS_ENABLE_CUDA
           //compute projection-based interpolation of the Lagrangian interpolation
           DynRankView ConstructWithLabel(basisCoeffsHGrad, numCells, basisCardinality);
           {
@@ -570,7 +569,6 @@ int InterpolationProjectionTri(const bool verbose) {
                   "\nThe max The infinite norm of the difference between the weights is: " <<  diffErr << std::endl;
             }
           }
-#endif
         }
       }
     } while(std::next_permutation(&reorder[0]+1, &reorder[0]+4)); //reorder vertices of common face
@@ -685,7 +683,7 @@ int InterpolationProjectionTri(const bool verbose) {
                   auto inView = Kokkos::subview( dofCoordsOriented,i,Kokkos::ALL(),Kokkos::ALL());
                   auto outView =Kokkos::subview( triLinearBasisValuesAtDofCoords,i,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
                   triLinearBasis.getValues(outView, inView);
-
+                  DeviceSpaceType().fence();
                   for(ordinal_type j=0; j<basisCardinality; ++j)
                     for(std::size_t k=0; k<tri.getNodeCount(); ++k)
                       physDofCoords(i,j,d) += vertices[tris[i][k]][d]*triLinearBasisValuesAtDofCoords(i,k,j);
@@ -816,7 +814,6 @@ int InterpolationProjectionTri(const bool verbose) {
             }
           }
 
-#ifndef KOKKOS_ENABLE_CUDA
           //compute projection-based interpolation of the Lagrangian interpolation
           DynRankView ConstructWithLabel(basisCoeffsHCurl, numCells, basisCardinality);
           {
@@ -957,7 +954,6 @@ int InterpolationProjectionTri(const bool verbose) {
                   "\nThe max The infinite norm of the difference between the weights is: " <<  diffErr << std::endl;
             }
           }
-#endif
         }
       }
     } while(std::next_permutation(&reorder[0]+1, &reorder[0]+4)); //reorder vertices of common face
@@ -1069,7 +1065,7 @@ int InterpolationProjectionTri(const bool verbose) {
                 auto inView = Kokkos::subview( dofCoordsOriented,i,Kokkos::ALL(),Kokkos::ALL());
                 auto outView =Kokkos::subview( triLinearBasisValuesAtDofCoords,i,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
                 triLinearBasis.getValues(outView, inView);
-
+                DeviceSpaceType().fence();
                 for(ordinal_type j=0; j<basisCardinality; ++j)
                   for(std::size_t k=0; k<tri.getNodeCount(); ++k)
                     physDofCoords(i,j,d) += vertices[tris[i][k]][d]*triLinearBasisValuesAtDofCoords(i,k,j);
@@ -1210,7 +1206,6 @@ int InterpolationProjectionTri(const bool verbose) {
             }
           }
 
-#ifndef KOKKOS_ENABLE_CUDA
           //compute projection-based interpolation of the Lagrangian interpolation
           DynRankView ConstructWithLabel(basisCoeffsHDiv, numCells, basisCardinality);
           {
@@ -1354,7 +1349,6 @@ int InterpolationProjectionTri(const bool verbose) {
                   "\nThe max The infinite norm of the difference between the weights is: " <<  diffErr << std::endl;
             }
           }
-#endif
         }
       }
     } while(std::next_permutation(&reorder[0]+1, &reorder[0]+4)); //reorder vertices of common face
@@ -1440,7 +1434,7 @@ int InterpolationProjectionTri(const bool verbose) {
               auto inView = Kokkos::subview( dofCoordsOriented,i,Kokkos::ALL(),Kokkos::ALL());
               auto outView =Kokkos::subview( triLinearBasisValuesAtDofCoords,i,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
               triLinearBasis.getValues(outView, inView);
-
+              DeviceSpaceType().fence();
               for(ordinal_type j=0; j<basisCardinality; ++j)
                 for(std::size_t k=0; k<tri.getNodeCount(); ++k)
                   physDofCoords(i,j,d) += vertices[tris[i][k]][d]*triLinearBasisValuesAtDofCoords(i,k,j);
@@ -1545,7 +1539,6 @@ int InterpolationProjectionTri(const bool verbose) {
         }
       }
 
-#ifndef KOKKOS_ENABLE_CUDA
       //compute projection-based interpolation of the Lagrangian interpolation
       DynRankView ConstructWithLabel(basisCoeffsHVol, numCells, basisCardinality);
       {
@@ -1601,7 +1594,7 @@ int InterpolationProjectionTri(const bool verbose) {
         if(diffErr > pow(16, degree)*tol) { //heuristic relation on how round-off error depends on degree
           errorFlag++;
           *outStream << std::setw(70) << "^^^^----FAILURE!" << "\n";
-          *outStream << "HGRAD_C" << degree << ": The weights recovered with the optimization are different than the one used for generating the functon."<<
+          *outStream << "HVOL_C" << degree << ": The weights recovered with the optimization are different than the one used for generating the functon."<<
               "\nThe max The infinite norm of the difference between the weights is: " <<  diffErr << std::endl;
         }
       }
@@ -1661,11 +1654,10 @@ int InterpolationProjectionTri(const bool verbose) {
         if(diffErr > pow(16, degree)*tol) { //heuristic relation on how round-off error depends on degree
           errorFlag++;
           *outStream << std::setw(70) << "^^^^----FAILURE!" << "\n";
-          *outStream << "HGRAD_C" << degree << ": The weights recovered with the L2 optimization are different than the one used for generating the functon."<<
+          *outStream << "HVOL_C" << degree << ": The weights recovered with the L2 optimization are different than the one used for generating the functon."<<
               "\nThe max The infinite norm of the difference between the weights is: " <<  diffErr << std::endl;
         }
       }
-#endif
     }
   } catch (std::exception &err) {
     std::cout << " Exeption\n";

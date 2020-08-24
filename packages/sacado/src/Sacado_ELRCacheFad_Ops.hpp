@@ -597,6 +597,10 @@ FAD_UNARYOP_MACRO(sqrt,
                   SqrtOp,
                   a = scalar_type(1.0)/(scalar_type(2.0)*std::sqrt(v)),
                   std::sqrt(v))
+FAD_UNARYOP_MACRO(safe_sqrt,
+                  SafeSqrtOp,
+                  a = (v == value_type(0.0) ? value_type(0.0) : value_type(scalar_type(1.0)/(scalar_type(2.0)*std::sqrt(v)))),
+                  std::sqrt(v))
 FAD_UNARYOP_MACRO(cos,
                   CosOp,
                   a = -std::sin(v),
@@ -2441,7 +2445,11 @@ namespace Sacado {
         const value_type_1 v1 = expr1.val();
         const value_type_2 v2 = expr2.val();
         v = std::pow(v1,v2);
-        if (v1 == scalar_type(0.0)) {
+        if (expr2.size() == 0 && v2 == scalar_type(1.0)) {
+          a = scalar_type(1.0);
+          b = scalar_type(0.0);
+        }
+        else if (v1 == scalar_type(0.0)) {
           a = scalar_type(0.0);
           b = scalar_type(0.0);
         }
@@ -2573,7 +2581,10 @@ namespace Sacado {
         const value_type_1 v1 = expr1.val();
         const value_type_2 v2 = expr2.val();
         v = std::pow(v1,v2);
-        if (v1 == scalar_type(0.0)) {
+        if (v2 == scalar_type(1.0)) {
+          a = scalar_type(1.0);
+        }
+        else if (v1 == scalar_type(0.0)) {
           a = scalar_type(0.0);
         }
         else {

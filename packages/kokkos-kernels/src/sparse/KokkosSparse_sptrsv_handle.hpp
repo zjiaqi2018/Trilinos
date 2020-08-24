@@ -98,6 +98,7 @@ public:
   typedef typename Kokkos::View<size_type *, HandleTempMemorySpace> nnz_row_view_temp_t;
   typedef typename Kokkos::View<size_type *, HandlePersistentMemorySpace> nnz_row_view_t;
   typedef typename nnz_row_view_t::HostMirror host_nnz_row_view_t;
+  typedef typename Kokkos::View<int *, HandlePersistentMemorySpace> int_row_view_t;
  // typedef typename row_lno_persistent_work_view_t::HostMirror row_lno_persistent_work_host_view_t; //Host view type
   typedef typename Kokkos::View<const size_type *, HandlePersistentMemorySpace, Kokkos::MemoryTraits<Kokkos::Unmanaged|Kokkos::RandomAccess>> nnz_row_unmanaged_view_t; // for rank1 subviews
 
@@ -213,7 +214,7 @@ public:
 #endif
 
 #ifdef KOKKOSKERNELS_ENABLE_SUPERNODAL_SPTRSV
-  using supercols_memory_space = typename execution_space::memory_space;
+  using supercols_memory_space = TemporaryMemorySpace;
 
   using supercols_host_execution_space = Kokkos::DefaultHostExecutionSpace;
   using supercols_host_memory_space = typename supercols_host_execution_space::memory_space;
@@ -221,7 +222,7 @@ public:
   using integer_view_t = Kokkos::View<int*, supercols_memory_space>;
   using integer_view_host_t = Kokkos::View<int*, supercols_host_memory_space>;
 
-  using workspace_t = typename Kokkos::View<scalar_t*, memory_space>;
+  using workspace_t = typename Kokkos::View<scalar_t*, supercols_memory_space>;
 
   //
   using host_crsmat_t = KokkosSparse::CrsMatrix<scalar_t, nnz_lno_t, supercols_host_execution_space, void, size_type>;
@@ -310,6 +311,7 @@ private:
 
 #ifdef KOKKOSKERNELS_ENABLE_TPL_CUSPARSE
   SPTRSVcuSparseHandleType *cuSPARSEHandle;
+  int_row_view_t tmp_int_rowmap;
 #endif
 
 #ifdef KOKKOSKERNELS_ENABLE_SUPERNODAL_SPTRSV
@@ -409,6 +411,7 @@ public:
     require_symbolic_chain_phase(false)
 #ifdef KOKKOSKERNELS_ENABLE_TPL_CUSPARSE
     , cuSPARSEHandle(nullptr)
+    , tmp_int_rowmap()
 #endif
 #ifdef KOKKOSKERNELS_ENABLE_SUPERNODAL_SPTRSV
     , merge_supernodes (false)
@@ -438,11 +441,16 @@ public:
 
 #ifdef KOKKOSKERNELS_ENABLE_SUPERNODAL_SPTRSV
   // set nsuper and supercols (# of supernodes, and map from supernode to column id
-  void set_supernodes (signed_integral_t nsuper_, int *supercols_, int *etree_) {
-    // set etree
+  template<class input_int_type>
+  void set_supernodes (signed_integral_t nsuper_, input_int_type *supercols_, int *etree_) {
+    // set etree (just wrap etree in a view)
     this->etree_host = integer_view_host_t (etree_, nsuper_);
-    // set supernodes
-    integer_view_host_t supercols_view = integer_view_host_t (supercols_, 1+nsuper_);
+    // set supernodes (make a copy, from input_int_type to int)
+    integer_view_host_t supercols_view = integer_view_host_t ("supercols", 1+nsuper_);
+    for (signed_integral_t i = 0; i <= nsuper_; i++) {
+      supercols_view (i) = supercols_[i];
+    }
+
     set_supernodes (nsuper_, supercols_view, etree_);
   }
 
@@ -827,6 +835,28 @@ public:
   SPTRSVcuSparseHandleType *get_cuSparseHandle(){
     return this->cuSPARSEHandle;
   }
+
+  void allocate_tmp_int_rowmap (size_type N) {
+         tmp_int_rowmap = int_row_view_t(Kokkos::ViewAllocateWithoutInitializing("tmp_int_rowmap"), N);
+  }
+  template <typename RowViewType>
+  int_row_view_t get_int_rowmap_view_copy (const RowViewType & rowmap) {
+    Kokkos::deep_copy(tmp_int_rowmap, rowmap);
+    return tmp_int_rowmap;
+  }
+  template <typename RowViewType>
+  int* get_int_rowmap_ptr_copy (const RowViewType & rowmap) {
+    Kokkos::deep_copy(tmp_int_rowmap, rowmap);
+    Kokkos::fence();
+    return tmp_int_rowmap.data();
+  }
+  int_row_view_t get_int_rowmap_view () {
+    return tmp_int_rowmap;
+  }
+  int* get_int_rowmap_ptr () {
+    return tmp_int_rowmap.data();
+  }
+
 #endif
 
 

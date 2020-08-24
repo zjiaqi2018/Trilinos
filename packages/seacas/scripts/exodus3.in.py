@@ -1,5 +1,5 @@
 """
-exodus.py v 1.19.0 (seacas-beta) is a python wrapper of some of the exodus library
+exodus.py v 1.19.1 (seacas-beta) is a python wrapper of some of the exodus library
 (Python 3 Version)
 
 Exodus is a common database for multiple application codes (mesh
@@ -51,37 +51,12 @@ of global variables. Although these examples correspond to typical FE
 applications, the data format is flexible enough to accommodate a
 spectrum of uses.
 
-Copyright(C) 2019 National Technology & Engineering Solutions of
-Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
+Copyright(C) 1999-2020 National Technology & Engineering Solutions
+of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 NTESS, the U.S. Government retains certain rights in this software.
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are
-met:
+See packages/seacas/LICENSE for details
 
-* Redistributions of source code must retain the above copyright
-   notice, this list of conditions and the following disclaimer.
-
-* Redistributions in binary form must reproduce the above
-  copyright notice, this list of conditions and the following
-  disclaimer in the documentation and/or other materials provided
-  with the distribution.
-
-* Neither the name of NTESS nor the names of its
-  contributors may be used to endorse or promote products derived
-  from this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 import sys
@@ -95,10 +70,10 @@ from enum import Enum
 
 EXODUS_PY_COPYRIGHT_AND_LICENSE = __doc__
 
-EXODUS_PY_VERSION = "1.19.0 (seacas-py3)"
+EXODUS_PY_VERSION = "1.19.1 (seacas-py3)"
 
 EXODUS_PY_COPYRIGHT = """
-You are using exodus.py v 1.19.0 (seacas-py3), a python wrapper of some of the exodus library.
+You are using exodus.py v 1.19.1 (seacas-py3), a python wrapper of some of the exodus library.
 
 Copyright (c) 2013, 2014, 2015, 2016, 2017, 2018, 2019 National Technology &
 Engineering Solutions of Sandia, LLC (NTESS).  Under the terms of
@@ -568,7 +543,7 @@ class attribute:
 
     def __repr__(self):
         return "attribute(name=%r, entity_type=%r, entity_id=%r, values=%r)" % (self.name,self.entity_type,self.entity_id,self.values)
-    
+
 class ex_attribute(ctypes.Structure):
     """
     Used for accessing underlying exodus library...
@@ -734,7 +709,7 @@ class exodus:
         num_ss_vars = self.get_variable_number('EX_SIDE_SET')
         num_assem_vars = self.get_reduction_variable_number('EX_ASSEMBLY')
         num_blob_vars = self.get_reduction_variable_number('EX_BLOB')
-        
+
         print("\n Database: {0}\n"
               " Title:\t{17}\n\n"
               " Number of spatial dimensions = {1:3d}\t"
@@ -769,8 +744,8 @@ class exodus:
                       self.num_side_sets(),
                       total_ns_nodes, total_sides,
                       num_glo_vars, num_nod_vars, num_ele_vars,
-                      num_ns_vars, num_ss_vars, self.num_times(), self.title(), 
-                      self.num_assembly(), num_assem_vars, 
+                      num_ns_vars, num_ss_vars, self.num_times(), self.title(),
+                      self.num_assembly(), num_assem_vars,
                       self.num_blob(), num_blob_vars))
     #
     # build the info struct
@@ -831,7 +806,7 @@ class exodus:
         EXODUS_LIB.ex_set_int64_status(fileId, i64Status)
 
         self.__copy_file(fileId, include_transient)
-        EXODUS_LIB.ex_close(self.fileId)
+        EXODUS_LIB.ex_close(fileId)
 
         return exodus(fileName, "a")
 
@@ -6438,7 +6413,7 @@ def internal_add_variables(exo, obj_type, entvars, debugPrint):
 
     if len(entvars) == 0:
         return
-    
+
     if debugPrint:
         print("Construct Truth Table for additional variables")
 

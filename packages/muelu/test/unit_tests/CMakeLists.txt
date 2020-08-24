@@ -8,7 +8,7 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/../../src/Smoothers/BlockedSmoot
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/../../src/Utils)
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/../../adapters)
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/Smoothers)
-INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/../../research/mmayr/composite_to_regions/src)
+INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/../../research/regionMG/src)
 
 #INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR}/)
 
@@ -91,6 +91,8 @@ TRIBITS_COPY_FILES_TO_BINARY_DIR(UnitTestsTestMatrices_cp
   SOURCE_FILES aniso2dx.mat
   SOURCE_FILES aniso2dy.mat
   SOURCE_FILES iso2d.mat
+  SOURCE_FILES fuego0.mm
+  SOURCE_FILES fuego1.mm
   DEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/TestMatrices
 )
 
@@ -211,7 +213,10 @@ IF (${PACKAGE_NAME}_ENABLE_Zoltan AND TPL_ENABLE_MPI)
 ENDIF()
 
 IF (${PACKAGE_NAME}_ENABLE_Experimental AND ${PACKAGE_NAME}_ENABLE_Tpetra AND ${PACKAGE_NAME}_ENABLE_Ifpack2 AND ${PACKAGE_NAME}_ENABLE_Amesos2)
-  APPEND_SET(SOURCES_REGION RegionMatrix.cpp RegionVector.cpp)
+  APPEND_SET(SOURCES_REGION
+    RegionMatrix.cpp
+    RegionVector.cpp
+    RegionRFactory.cpp)
 ENDIF()
 
 
@@ -350,6 +355,7 @@ ENDIF()
       PASS_REGULAR_EXPRESSION "End Result: TEST PASSED"
       NUM_MPI_PROCS 1
       COMM serial mpi
+      RUN_SERIAL
       )
 
     TRIBITS_ADD_TEST(
@@ -359,6 +365,7 @@ ENDIF()
       PASS_REGULAR_EXPRESSION "End Result: TEST PASSED"
       NUM_MPI_PROCS 4
       COMM mpi
+      RUN_SERIAL
       )
 
     IF (${PACKAGE_NAME}_ENABLE_CreatePreconditionerTests)
