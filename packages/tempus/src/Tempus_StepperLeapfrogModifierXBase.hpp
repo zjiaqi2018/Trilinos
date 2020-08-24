@@ -114,7 +114,7 @@ private:
       case StepperLeapfrogAppAction<Scalar>::END_STEP:
       {
         modType = XDOT_END_STEP;
-        x = stepper->getStepperXDot(workingState);
+        x = stepper->getStepperXDot();
         break;
       }
       default:
