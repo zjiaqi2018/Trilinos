@@ -67,9 +67,9 @@ StepperLeapfrog<Scalar>::StepperLeapfrog(
     this->setUseFSAL(            useFSAL);
     this->setICConsistency(      ICConsistency);
     this->setICConsistencyCheck( ICConsistencyCheck);
-
+#ifndef TEMPUS_HIDE_DEPRECATED_CODE
     this->setObserver();
-
+#endif
     this->setAppAction(stepperLFAppAction);
     if (appModel != Teuchos::null) {
 

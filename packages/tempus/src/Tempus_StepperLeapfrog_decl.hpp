@@ -11,8 +11,8 @@
 
 #include "Tempus_config.hpp"
 #include "Tempus_StepperExplicit.hpp"
-#include "Tempus_StepperObserverComposite.hpp"
 #ifndef TEMPUS_HIDE_DEPRECATED_CODE
+  #include "Tempus_StepperObserverComposite.hpp"
   #include "Tempus_StepperLeapfrogObserver.hpp"
 #endif
 #include "Tempus_StepperLeapfrogAppAction.hpp"
