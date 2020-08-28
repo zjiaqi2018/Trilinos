@@ -254,7 +254,7 @@ namespace Tempus {
       RCP<SolutionState<Scalar> > currentState=solutionHistory->getCurrentState();
 
       RCP<Thyra::VectorBase<Scalar> > x    = workingState->getX();
-      RCP<Thyra::VectorBase<Scalar> > xDot = this->getStepperXDot(workingState);
+      RCP<Thyra::VectorBase<Scalar> > xDot = this->getStepperXDot();
 
       //get time, dt and dtOld
       const Scalar time  = workingState->getTime();
