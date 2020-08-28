@@ -28,12 +28,9 @@ bool MeshModification::modification_begin(const std::string description)
         if (m_bulkData.parallel_size() > 1) {
             verify_parallel_consistency( m_bulkData.mesh_meta_data() , m_bulkData.parallel() );
         }
-
-        this->increment_sync_count();
     }
     else
     {
-        this->increment_sync_count();
         this->reset_undeleted_entity_states_to_unchanged();
     }
 
@@ -44,6 +41,7 @@ bool MeshModification::modification_begin(const std::string description)
       stkField->sync_to_host();
     }
 
+    this->increment_sync_count();
     return true;
 }
 
@@ -80,7 +78,7 @@ bool MeshModification::internal_modification_end(modification_optimization opt)
         // Resolve modification or deletion of shared entities
         // which can cause deletion of ghost entities.
         stk::mesh::EntityVector entitiesNoLongerShared;
-        m_bulkData.internal_resolve_shared_modify_delete(entitiesNoLongerShared);
+        internal_resolve_shared_modify_delete(entitiesNoLongerShared);
 
         // Resolve modification or deletion of ghost entities
         // by destroying ghost entities that have been touched.
@@ -167,6 +165,7 @@ bool MeshModification::internal_modification_end_after_node_sharing_resolution(m
     {
         m_bulkData.internal_resolve_parallel_create_edges_and_faces();
         stk::mesh::EntityVector entitiesNoLongerShared;
+        internal_resolve_shared_modify_delete(entitiesNoLongerShared);
         m_bulkData.internal_resolve_shared_membership(entitiesNoLongerShared);
 
         if(m_bulkData.is_automatic_aura_on())

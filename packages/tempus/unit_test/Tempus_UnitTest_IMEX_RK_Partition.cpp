@@ -99,6 +99,9 @@ TEUCHOS_UNIT_TEST(IMEX_RK_Partition, Default_Construction)
   stepper->setImplicitTableau(implicitTableau);        stepper->initialize();  TEUCHOS_TEST_FOR_EXCEPT(!stepper->isInitialized());
   stepper->setOrder(order);                            stepper->initialize();  TEUCHOS_TEST_FOR_EXCEPT(!stepper->isInitialized());
 
+  TEUCHOS_TEST_FOR_EXCEPT(explicitTableau != stepper->getTableau());
+  TEUCHOS_TEST_FOR_EXCEPT(explicitTableau != stepper->getExplicitTableau());
+  TEUCHOS_TEST_FOR_EXCEPT(implicitTableau != stepper->getImplicitTableau());
 
   // Full argument list construction.
 #ifndef TEMPUS_HIDE_DEPRECATED_CODE
@@ -115,7 +118,7 @@ TEUCHOS_UNIT_TEST(IMEX_RK_Partition, Default_Construction)
   TEUCHOS_TEST_FOR_EXCEPT(!stepper->isInitialized());
 
   // Test stepper properties.
-  std::cout << "ordero = " << stepper->getOrder() << std::endl;
+  //std::cout << "order = " << stepper->getOrder() << std::endl;
   TEUCHOS_ASSERT(stepper->getOrder() == 2);
 }
 

@@ -64,7 +64,6 @@
 #include "Tpetra_Import_Util2.hpp"
 #include "Tpetra_Details_packCrsGraph.hpp"
 #include "Tpetra_Details_unpackCrsGraphAndCombine.hpp"
-#include "Tpetra_Details_determineLocalTriangularStructure.hpp"
 #include "Tpetra_Details_CrsPadding.hpp"
 #include "Tpetra_Util.hpp"
 #include <algorithm>
@@ -653,13 +652,13 @@ namespace Tpetra {
     k_lclInds1D_ = lclGraph_.entries;
     k_rowPtrs_ = lclGraph_.row_map;
 
+    set_need_sync_host_uvm_access(); // lclGraph_ potentially still in a kernel
+
     const bool callComputeGlobalConstants = params.get () == nullptr ||
       params->get ("compute global constants", true);
-    const bool computeLocalTriangularConstants = params.get () == nullptr ||
-      params->get ("compute local triangular constants", true);
 
     if (callComputeGlobalConstants) {
-      this->computeGlobalConstants (computeLocalTriangularConstants);
+      this->computeGlobalConstants ();
     }
     this->fillComplete_ = true;
     this->checkInternalState ();
@@ -699,6 +698,8 @@ namespace Tpetra {
     k_lclInds1D_ = lclGraph_.entries;
     k_rowPtrs_ = lclGraph_.row_map;
 
+    set_need_sync_host_uvm_access(); // lclGraph_ potentially still in a kernel
+
     if (! params.is_null() && params->isParameter("sorted") &&
         ! params->get<bool>("sorted")) {
       indicesAreSorted_ = false;
@@ -710,11 +711,8 @@ namespace Tpetra {
     const bool callComputeGlobalConstants =
       params.get () == nullptr ||
       params->get ("compute global constants", true);
-    const bool computeLocalTriangularConstants =
-      params.get () == nullptr ||
-      params->get ("compute local triangular constants", true);
     if (callComputeGlobalConstants) {
-      this->computeGlobalConstants (computeLocalTriangularConstants);
+      this->computeGlobalConstants ();
     }
     fillComplete_ = true;
     checkInternalState ();
@@ -2069,7 +2067,6 @@ namespace Tpetra {
     const auto INV = Teuchos::OrdinalTraits<global_size_t>::invalid();
 
     globalNumEntries_       = INV;
-    globalNumDiags_         = INV;
     globalMaxNumRowEntries_ = INV;
     haveGlobalConstants_    = false;
   }
@@ -2969,6 +2966,9 @@ namespace Tpetra {
     noRedundancies_      = true;
     k_lclInds1D_         = columnIndices;
     k_rowPtrs_           = rowPointers;
+
+    set_need_sync_host_uvm_access(); // columnIndices and rowPointers potentially still in a kernel
+
     // Storage MUST be packed, since the interface doesn't give any
     // way to indicate any extra space at the end of each row.
     storageStatus_       = Details::STORAGE_1D_PACKED;
@@ -3378,8 +3378,6 @@ namespace Tpetra {
   {
     clearGlobalConstants();
     if (params != Teuchos::null) this->setParameterList (params);
-    lowerTriangular_  = false;
-    upperTriangular_  = false;
     // either still sorted/merged or initially sorted/merged
     indicesAreSorted_ = true;
     noRedundancies_ = true;
@@ -3619,13 +3617,11 @@ namespace Tpetra {
 
     const bool callComputeGlobalConstants = params.get () == nullptr ||
       params->get ("compute global constants", true);
-    const bool computeLocalTriangularConstants = params.get () == nullptr ||
-      params->get ("compute local triangular constants", true);
     if (callComputeGlobalConstants) {
-      this->computeGlobalConstants (computeLocalTriangularConstants);
+      this->computeGlobalConstants ();
     }
     else {
-      this->computeLocalConstants (computeLocalTriangularConstants);
+      this->computeLocalConstants ();
     }
     this->fillComplete_ = true;
     this->checkInternalState ();
@@ -3754,22 +3750,20 @@ namespace Tpetra {
 
     const bool callComputeGlobalConstants = params.get () == nullptr ||
       params->get ("compute global constants", true);
-    const bool computeLocalTriangularConstants = params.get () == nullptr ||
-      params->get ("compute local triangular constants", true);
 
     if (callComputeGlobalConstants) {
 #ifdef HAVE_TPETRA_MMM_TIMINGS
     MM = Teuchos::null;
     MM = Teuchos::rcp(new TimeMonitor(*TimeMonitor::getNewTimer(prefix + std::string("ESFC-G-cGC (const)"))));
 #endif // HAVE_TPETRA_MMM_TIMINGS
-      this->computeGlobalConstants (computeLocalTriangularConstants);
+      this->computeGlobalConstants ();
     }
     else {
 #ifdef HAVE_TPETRA_MMM_TIMINGS
       MM = Teuchos::null;
       MM = Teuchos::rcp(new TimeMonitor(*TimeMonitor::getNewTimer(prefix + std::string("ESFC-G-cGC (noconst)"))));
 #endif // HAVE_TPETRA_MMM_TIMINGS
-      this->computeLocalConstants (computeLocalTriangularConstants);
+      this->computeLocalConstants ();
     }
 
     fillComplete_ = true;
@@ -4029,6 +4023,8 @@ namespace Tpetra {
 
     // Build the local graph.
     lclGraph_ = local_graph_type (ind_d, ptr_d_const);
+
+    set_need_sync_host_uvm_access(); // make sure kernel setup of indices is fenced before a host access
   }
 
   template <class LocalOrdinal, class GlobalOrdinal, class Node>
@@ -4327,7 +4323,7 @@ namespace Tpetra {
   template <class LocalOrdinal, class GlobalOrdinal, class Node>
   void
   CrsGraph<LocalOrdinal, GlobalOrdinal, Node>::
-  computeGlobalConstants (const bool computeLocalTriangularConstants)
+  computeGlobalConstants ()
   {
     using ::Tpetra::Details::ProfilingRegion;
     using Teuchos::ArrayView;
@@ -4337,7 +4333,7 @@ namespace Tpetra {
 
     ProfilingRegion regionCGC ("Tpetra::CrsGraph::computeGlobalConstants");
 
-    this->computeLocalConstants (computeLocalTriangularConstants);
+    this->computeLocalConstants ();
 
     // Compute global constants from local constants.  Processes that
     // already have local constants still participate in the
@@ -4356,29 +4352,11 @@ namespace Tpetra {
       // good idea to use nonblocking all-reduces (MPI 3), so that we
       // don't have to wait around for the first one to finish before
       // starting the second one.
-      GST lcl[2], gbl[2];
-      lcl[0] = static_cast<GST> (this->getNodeNumEntries ());
+      GST lcl, gbl;
+      lcl = static_cast<GST> (this->getNodeNumEntries ());
 
-      // mfh 03 May 2018: nodeNumDiags_ is invalid if
-      // computeLocalTriangularConstants is false, but there's no
-      // practical network latency difference between an all-reduce of
-      // length 1 and an all-reduce of length 2, so it's not worth
-      // distinguishing between the two.  However, we do want to avoid
-      // integer overflow, so we'll just set the input local sum to
-      // zero in that case.
-      lcl[1] = computeLocalTriangularConstants ?
-        static_cast<GST> (this->nodeNumDiags_) :
-        static_cast<GST> (0);
-
-      reduceAll<int,GST> (comm, Teuchos::REDUCE_SUM, 2, lcl, gbl);
-      this->globalNumEntries_ = gbl[0];
-
-      // mfh 03 May 2018: If not computing local triangular
-      // properties, users want this to be invalid, not just zero.
-      // This will help with debugging.
-      this->globalNumDiags_ = computeLocalTriangularConstants ?
-        gbl[1] :
-        Teuchos::OrdinalTraits<GST>::invalid ();
+      reduceAll<int,GST> (comm, Teuchos::REDUCE_SUM, 1, &lcl, &gbl);
+      this->globalNumEntries_ = gbl;
 
       const GST lclMaxNumRowEnt = static_cast<GST> (this->nodeMaxNumRowEntries_);
       reduceAll<int, GST> (comm, Teuchos::REDUCE_MAX, lclMaxNumRowEnt,
@@ -4391,9 +4369,8 @@ namespace Tpetra {
   template <class LocalOrdinal, class GlobalOrdinal, class Node>
   void
   CrsGraph<LocalOrdinal, GlobalOrdinal, Node>::
-  computeLocalConstants (const bool computeLocalTriangularConstants)
+  computeLocalConstants ()
   {
-    using ::Tpetra::Details::determineLocalTriangularStructure;
     using ::Tpetra::Details::ProfilingRegion;
 
     ProfilingRegion regionCLC ("Tpetra::CrsGraph::computeLocalConstants");
@@ -4402,63 +4379,20 @@ namespace Tpetra {
     }
 
     // Reset local properties
-    this->lowerTriangular_ = false;
-    this->upperTriangular_ = false;
     this->nodeMaxNumRowEntries_ =
       Teuchos::OrdinalTraits<size_t>::invalid();
-    this->nodeNumDiags_ = Teuchos::OrdinalTraits<size_t>::invalid();
 
-    if (computeLocalTriangularConstants) {
-      const bool hasRowAndColumnMaps =
-        this->rowMap_.get () != nullptr && this->colMap_.get () != nullptr;
-      if (hasRowAndColumnMaps) {
-        auto lclRowMap = this->rowMap_->getLocalMap ();
-        auto lclColMap = this->colMap_->getLocalMap ();
+    using LO = local_ordinal_type;
 
-        // KJ: We need this fence even though it passes tests. Map uses kokkos
-        // view with relying on UVM (it does not have a dual view context). So,
-        // the values can be touched somewhere and we need to make sure the
-        // updates should be done before we use it.
-        execution_space().fence ();
+    auto ptr = this->lclGraph_.row_map;
+    const LO lclNumRows = ptr.extent(0) == 0 ?
+      static_cast<LO> (0) :
+      (static_cast<LO> (ptr.extent(0)) - static_cast<LO> (1));
 
-        // mfh 01 May 2018: See GitHub Issue #2658.
-        constexpr bool ignoreMapsForTriStruct = true;
-        auto result =
-          determineLocalTriangularStructure (this->lclGraph_, lclRowMap,
-                                             lclColMap, ignoreMapsForTriStruct);
-        this->lowerTriangular_ = result.couldBeLowerTriangular;
-        this->upperTriangular_ = result.couldBeUpperTriangular;
-        this->nodeMaxNumRowEntries_ = result.maxNumRowEnt;
-        this->nodeNumDiags_ = result.diagCount;
-      }
-      else {
-        this->nodeMaxNumRowEntries_ = 0;
-        this->nodeNumDiags_ = 0;
-      }
-    }
-    else {
-      using LO = local_ordinal_type;
-
-      // KJ: This one is a bit different from the above. Conservatively thinking,
-      // we also need the fence here as lclGraph_.row_map is on UVM and it can be
-      // still updated. In practice, the local graph construction should be done
-      // before this is called. This routine is computeLocalConstants. If we want
-      // a better code, we need a flag stating that the local graph is completed
-      // and safe to use it without fence.
-      // For now, I recommend to put the fence. Defining the state of local
-      // object can be improvements in the code.
-      execution_space().fence ();
-
-      auto ptr = this->lclGraph_.row_map;
-      const LO lclNumRows = ptr.extent(0) == 0 ?
-        static_cast<LO> (0) :
-        (static_cast<LO> (ptr.extent(0)) - static_cast<LO> (1));
-
-      const LO lclMaxNumRowEnt =
-        ::Tpetra::Details::maxDifference ("Tpetra::CrsGraph: nodeMaxNumRowEntries",
-                                ptr, lclNumRows);
-      this->nodeMaxNumRowEntries_ = static_cast<size_t> (lclMaxNumRowEnt);
-    }
+    const LO lclMaxNumRowEnt =
+      ::Tpetra::Details::maxDifference ("Tpetra::CrsGraph: nodeMaxNumRowEntries",
+                              ptr, lclNumRows);
+    this->nodeMaxNumRowEntries_ = static_cast<size_t> (lclMaxNumRowEnt);
     this->haveLocalConstants_ = true;
   }
 
@@ -4914,7 +4848,6 @@ namespace Tpetra {
       if (myImageID == 0) out << this->description() << std::endl;
       // O(1) globals, minus what was already printed by description()
       if (isFillComplete() && myImageID == 0) {
-        out << "Global number of diagonals = " << globalNumDiags_ << std::endl;
         out << "Global max number of row entries = " << globalMaxNumRowEntries_ << std::endl;
       }
       // constituent objects
@@ -4940,7 +4873,6 @@ namespace Tpetra {
           if (myImageID == imageCtr) {
             out << "Node ID = " << imageCtr << std::endl
                 << "Node number of entries = " << this->getNodeNumEntries () << std::endl
-                << "Node number of diagonals = " << nodeNumDiags_ << std::endl
                 << "Node max number of entries = " << nodeMaxNumRowEntries_ << std::endl;
             if (! indicesAreAllocated ()) {
               out << "Indices are not allocated." << std::endl;
@@ -5261,6 +5193,8 @@ namespace Tpetra {
       TEUCHOS_ASSERT( k_rowPtrs_.extent(0) == row_ptrs_beg.extent(0) );
     }
     this->k_rowPtrs_ = row_ptrs_beg;
+
+    set_need_sync_host_uvm_access(); // need fence before host UVM access of k_rowPtrs_
   }
 
   template <class LocalOrdinal, class GlobalOrdinal, class Node>
@@ -5299,14 +5233,6 @@ namespace Tpetra {
     std::unique_ptr<padding_type> padding(
       new padding_type(myRank, numSameIDs,
                        permuteFromLIDs.extent(0)));
-
-    // We're accessing data on host, so make sure all device
-    // computations on the graphs' data are done.
-    //
-    // NOTE (mfh 08 Feb 2020) If we ever get rid of this fence, look
-    // carefully in computeCrsPaddingFor{Same,Permuted}IDs to see if
-    // we need a fence there.
-    Kokkos::fence();
 
     computeCrsPaddingForSameIDs(*padding, source,
                                 static_cast<LO>(numSameIDs));
@@ -5353,6 +5279,8 @@ namespace Tpetra {
 
     std::vector<GO> srcGblColIndsScratch;
     std::vector<GO> tgtGblColIndsScratch;
+
+    execute_sync_host_uvm_access(); // protect host UVM access
     for (LO lclRowInd = 0; lclRowInd < numSameIDs; ++lclRowInd) {
       const GO srcGblRowInd = srcRowMap.getGlobalElement(lclRowInd);
       const GO tgtGblRowInd = tgtRowMap.getGlobalElement(lclRowInd);
@@ -5422,6 +5350,8 @@ namespace Tpetra {
     std::vector<GO> srcGblColIndsScratch;
     std::vector<GO> tgtGblColIndsScratch;
     const LO numPermutes = static_cast<LO>(permuteToLIDs_h.extent(0));
+
+    execute_sync_host_uvm_access(); // protect host UVM access
     for (LO whichPermute = 0; whichPermute < numPermutes; ++whichPermute) {
       const LO srcLclRowInd = permuteFromLIDs_h[whichPermute];
       const GO srcGblRowInd = srcRowMap.getGlobalElement(srcLclRowInd);
@@ -5484,7 +5414,7 @@ namespace Tpetra {
     } ();
     std::unique_ptr<padding_type> padding(
       new padding_type(myRank, numImports));
-    Kokkos::fence(); // Make sure device sees changes made by host
+
     if (imports.need_sync_host()) {
       imports.sync_host();
     }
@@ -5506,6 +5436,7 @@ namespace Tpetra {
 
     std::vector<GO> tgtGblColIndsScratch;
     size_t offset = 0;
+    execute_sync_host_uvm_access(); // protect host UVM access
     for (LO whichImport = 0; whichImport < numImports; ++whichImport) {
       // CrsGraph packs just global column indices, while CrsMatrix
       // packs bytes (first the number of entries in the row, then the
@@ -5581,7 +5512,7 @@ namespace Tpetra {
     } ();
     std::unique_ptr<padding_type> padding(
       new padding_type(myRank, numImports));
-    Kokkos::fence(); // Make sure host sees changes made by device
+
     if (imports.need_sync_host()) {
       imports.sync_host();
     }
@@ -5604,6 +5535,7 @@ namespace Tpetra {
     std::vector<GO> srcGblColIndsScratch;
     std::vector<GO> tgtGblColIndsScratch;
     size_t offset = 0;
+    execute_sync_host_uvm_access(); // protect host UVM access
     for (LO whichImport = 0; whichImport < numImports; ++whichImport) {
       // CrsGraph packs just global column indices, while CrsMatrix
       // packs bytes (first the number of entries in the row, then the
@@ -5855,10 +5787,6 @@ namespace Tpetra {
        "exportLIDs.size() = " << numExportLIDs << " != numPacketsPerLID.size()"
        " = " << numPacketsPerLID.size () << ".");
 
-    // We may be accessing UVM data on host below, so ensure that the
-    // device is done accessing it.
-    device_execution_space().fence ();
-
     const map_type& rowMap = * (this->getRowMap ());
     const map_type* const colMapPtr = this->colMap_.getRawPtr ();
     TEUCHOS_TEST_FOR_EXCEPTION_CLASS_FUNC
@@ -5890,6 +5818,7 @@ namespace Tpetra {
     Kokkos::View<size_t, host_device_type> errCountView (&errCount);
     constexpr size_t ONE = 1;
 
+    execute_sync_host_uvm_access(); // protect host UVM access
     Kokkos::parallel_reduce ("Tpetra::CrsGraph::pack: totalNumPackets",
       inputRange,
       [=] (const LO& i, size_t& curTotalNumPackets) {
@@ -6019,10 +5948,6 @@ namespace Tpetra {
         }
       });
 
-    // We may have accessed UVM data on host above, so ensure that the
-    // device sees these changes.
-    device_execution_space().fence ();
-
     TEUCHOS_TEST_FOR_EXCEPTION_CLASS_FUNC
       (errCount != 0, std::logic_error, "Packing encountered "
        "one or more errors!  errCount = " << errCount
@@ -6078,10 +6003,6 @@ namespace Tpetra {
     TEUCHOS_ASSERT( ! exportLIDs.need_sync_host () );
     auto exportLIDs_h = exportLIDs.view_host ();
 
-    // We may be accessing UVM data on host below, so ensure that the
-    // device is done accessing it.
-    device_execution_space().fence ();
-
     const map_type& rowMap = * (this->getRowMap ());
     const map_type* const colMapPtr = this->colMap_.getRawPtr ();
     TEUCHOS_TEST_FOR_EXCEPTION_CLASS_FUNC
@@ -6117,6 +6038,7 @@ namespace Tpetra {
       std::cerr << os.str ();
     }
 
+    execute_sync_host_uvm_access(); // protect host UVM access
     Kokkos::parallel_reduce
       ("Tpetra::CrsGraph::pack: totalNumPackets",
        inputRange,
@@ -6175,11 +6097,6 @@ namespace Tpetra {
     exports.clear_sync_state ();
     exports.modify_host ();
     auto exports_h = exports.view_host ();
-
-    // The graph may store its data in UVM memory, so make sure that
-    // any device kernels are done modifying the graph's data before
-    // reading the data.
-    device_execution_space().fence ();
 
     errCount = 0;
     Kokkos::parallel_scan
@@ -7591,6 +7508,8 @@ namespace Tpetra {
   CrsGraph<LocalOrdinal, GlobalOrdinal, Node>::
   swap(CrsGraph<LocalOrdinal, GlobalOrdinal, Node>& graph)
   {
+    std::swap(graph.need_sync_host_uvm_access, this->need_sync_host_uvm_access);
+
     std::swap(graph.rowMap_, this->rowMap_);
     std::swap(graph.colMap_, this->colMap_);
     std::swap(graph.rangeMap_, this->rangeMap_);
@@ -7601,11 +7520,9 @@ namespace Tpetra {
 
     std::swap(graph.lclGraph_, this->lclGraph_);
 
-    std::swap(graph.nodeNumDiags_, this->nodeNumDiags_);
     std::swap(graph.nodeMaxNumRowEntries_, this->nodeMaxNumRowEntries_);
 
     std::swap(graph.globalNumEntries_, this->globalNumEntries_);
-    std::swap(graph.globalNumDiags_, this->globalNumDiags_);
     std::swap(graph.globalMaxNumRowEntries_, this->globalMaxNumRowEntries_);
 
     std::swap(graph.numAllocForAllRows_, this->numAllocForAllRows_);
@@ -7621,8 +7538,6 @@ namespace Tpetra {
     std::swap(graph.indicesAreLocal_, this->indicesAreLocal_);
     std::swap(graph.indicesAreGlobal_, this->indicesAreGlobal_);
     std::swap(graph.fillComplete_, this->fillComplete_);
-    std::swap(graph.lowerTriangular_, this->lowerTriangular_);
-    std::swap(graph.upperTriangular_, this->upperTriangular_);
     std::swap(graph.indicesAreSorted_, this->indicesAreSorted_);
     std::swap(graph.noRedundancies_, this->noRedundancies_);
     std::swap(graph.haveLocalConstants_, this->haveLocalConstants_);
@@ -7672,11 +7587,9 @@ namespace Tpetra {
     output = this->rangeMap_->isSameAs( *(graph.rangeMap_) ) ? output : false;
     output = this->domainMap_->isSameAs( *(graph.domainMap_) ) ? output : false;
 
-    output = this->nodeNumDiags_ == graph.nodeNumDiags_ ? output : false;
     output = this->nodeMaxNumRowEntries_ == graph.nodeMaxNumRowEntries_ ? output : false;
 
     output = this->globalNumEntries_ == graph.globalNumEntries_ ? output : false;
-    output = this->globalNumDiags_ == graph.globalNumDiags_ ? output : false;
     output = this->globalMaxNumRowEntries_ == graph.globalMaxNumRowEntries_ ? output : false;
 
     output = this->numAllocForAllRows_ == graph.numAllocForAllRows_ ? output : false;
@@ -7687,8 +7600,6 @@ namespace Tpetra {
     output = this->indicesAreLocal_ == graph.indicesAreLocal_ ? output : false;
     output = this->indicesAreGlobal_ == graph.indicesAreGlobal_ ? output : false;
     output = this->fillComplete_ == graph.fillComplete_ ? output : false;
-    output = this->lowerTriangular_ == graph.lowerTriangular_ ? output : false;
-    output = this->upperTriangular_ == graph.upperTriangular_ ? output : false;
     output = this->indicesAreSorted_ == graph.indicesAreSorted_ ? output : false;
     output = this->noRedundancies_ == graph.noRedundancies_ ? output : false;
     output = this->haveLocalConstants_ == graph.haveLocalConstants_ ? output : false;
