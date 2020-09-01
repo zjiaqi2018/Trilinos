@@ -102,7 +102,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL( Directory, Uniform, LO, GO )
   using map_t = Tpetra::Map<LO, GO>;
   using node_t = typename map_t::node_type;
   using dir_t = 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         Tpetra::Details::DistributedContiguousDirectory<LO, GO, node_t>;
+#else
+        Tpetra::Details::DistributedContiguousDirectory<node_t>;
+#endif
 
   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
   int me = comm->getRank();
@@ -144,7 +148,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL( Directory, Replicate7223, LO, GO )
   using map_t = Tpetra::Map<LO, GO>;
   using node_t = typename map_t::node_type;
   using dir_t = 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         Tpetra::Details::DistributedContiguousDirectory<LO, GO, node_t>;
+#else
+        Tpetra::Details::DistributedContiguousDirectory<node_t>;
+#endif
 
   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
   int me = comm->getRank();
@@ -187,7 +195,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL( Directory, EvenProcs, LO, GO )
   using map_t = Tpetra::Map<LO, GO>;
   using node_t = typename map_t::node_type;
   using dir_t = 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         Tpetra::Details::DistributedContiguousDirectory<LO, GO, node_t>;
+#else
+        Tpetra::Details::DistributedContiguousDirectory<node_t>;
+#endif
 
   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
   int me = comm->getRank();
@@ -229,7 +241,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL( Directory, EvenProcsOffset, LO, GO )
   using map_t = Tpetra::Map<LO, GO>;
   using node_t = typename map_t::node_type;
   using dir_t = 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         Tpetra::Details::DistributedContiguousDirectory<LO, GO, node_t>;
+#else
+        Tpetra::Details::DistributedContiguousDirectory<node_t>;
+#endif
 
   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
   int me = comm->getRank();
@@ -273,7 +289,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL( Directory, OddProcsOffset, LO, GO )
   using map_t = Tpetra::Map<LO, GO>;
   using node_t = typename map_t::node_type;
   using dir_t = 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         Tpetra::Details::DistributedContiguousDirectory<LO, GO, node_t>;
+#else
+        Tpetra::Details::DistributedContiguousDirectory<node_t>;
+#endif
 
   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
   int me = comm->getRank();
@@ -318,7 +338,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL( Directory, OneProcOnly, LO, GO )
   using map_t = Tpetra::Map<LO, GO>;
   using node_t = typename map_t::node_type;
   using dir_t = 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         Tpetra::Details::DistributedContiguousDirectory<LO, GO, node_t>;
+#else
+        Tpetra::Details::DistributedContiguousDirectory<node_t>;
+#endif
 
   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
   int np = comm->getSize();

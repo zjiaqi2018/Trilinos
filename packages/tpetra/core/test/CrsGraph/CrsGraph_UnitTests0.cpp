@@ -111,11 +111,20 @@ namespace { // (anonymous)
   // UNIT TESTS
   //
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, BadConst, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, BadConst, Node )
+#endif
   {
     using Teuchos::REDUCE_MIN;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using map_type = Tpetra::Map<LO, GO, Node>;
     using graph_type = Tpetra::CrsGraph<LO, GO, Node>;
+#else
+    using map_type = Tpetra::Map<Node>;
+    using graph_type = Tpetra::CrsGraph<Node>;
+#endif
     RCP<const Comm<int> > comm = Tpetra::getDefaultComm ();
 
     // what happens when we call CrsGraph::submitEntry() for a row that isn't on the Map?
@@ -179,12 +188,21 @@ namespace { // (anonymous)
     // TEST_EQUALITY_CONST( gblSuccess, 1 );
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, BadGIDs, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, BadGIDs, Node )
+#endif
   {
     const bool debug = Tpetra::Details::Behavior::debug("CrsGraph");
     if (debug) {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       using GRAPH = Tpetra::CrsGraph<LO, GO, Node>;
       using map_type = Tpetra::Map<LO, GO, Node>;
+#else
+      using GRAPH = Tpetra::CrsGraph<Node>;
+      using map_type = Tpetra::Map<Node>;
+#endif
 
       const GST INVALID = Teuchos::OrdinalTraits<GST>::invalid ();
       // get a comm
@@ -216,13 +234,22 @@ namespace { // (anonymous)
     }
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, ExcessAllocation, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, ExcessAllocation, Node )
+#endif
   {
     using Teuchos::Comm;
     using Teuchos::RCP;
     using Teuchos::REDUCE_MIN;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     typedef Tpetra::CrsGraph<LO, GO, Node>  GRPH;
     using map_type = Tpetra::Map<LO, GO, Node>;
+#else
+    typedef Tpetra::CrsGraph<Node>  GRPH;
+    using map_type = Tpetra::Map<Node>;
+#endif
 
     const GST INVALID = Teuchos::OrdinalTraits<GST>::invalid();
     // get a comm
@@ -266,13 +293,22 @@ namespace { // (anonymous)
     TEST_EQUALITY_CONST(gblSuccess, 1);
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, insert_remove_LIDs, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, insert_remove_LIDs, Node )
+#endif
   {
     using Teuchos::Comm;
     using Teuchos::RCP;
     using Teuchos::REDUCE_MIN;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using GRAPH = Tpetra::CrsGraph<LO, GO, Node>;
     using map_type = Tpetra::Map<LO, GO, Node>;
+#else
+    using GRAPH = Tpetra::CrsGraph<Node>;
+    using map_type = Tpetra::Map<Node>;
+#endif
 
     const GST INVALID = Teuchos::OrdinalTraits<GST>::invalid ();
     // get a comm
@@ -313,10 +349,19 @@ namespace { // (anonymous)
     TEST_EQUALITY_CONST(gblSuccess, 1);
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, CopiesAndViews, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, CopiesAndViews, Node )
+#endif
   {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using GRAPH = Tpetra::CrsGraph<LO, GO, Node>;
     using map_type = Tpetra::Map<LO, GO, Node>;
+#else
+    using GRAPH = Tpetra::CrsGraph<Node>;
+    using map_type = Tpetra::Map<Node>;
+#endif
 
     // what happens when we call CrsGraph::submitEntry() for a row that isn't on the Map?
     const GST INVALID = Teuchos::OrdinalTraits<GST>::invalid ();
@@ -406,10 +451,19 @@ namespace { // (anonymous)
     }
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, WithStaticProfile, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, WithStaticProfile, Node )
+#endif
   {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using GRAPH = Tpetra::CrsGraph<LO, GO, Node>;
     using map_type = Tpetra::Map<LO, GO, Node>;
+#else
+    using GRAPH = Tpetra::CrsGraph<Node>;
+    using map_type = Tpetra::Map<Node>;
+#endif
 
     // what happens when we call CrsGraph::submitEntry() for a row that isn't on the Map?
     const GST INVALID = Teuchos::OrdinalTraits<GST>::invalid ();
@@ -435,11 +489,21 @@ namespace { // (anonymous)
     TEST_EQUALITY_CONST( globalSuccess_int, 0 );
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, EmptyGraphAlloc0, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, EmptyGraphAlloc0, Node )
+#endif
   {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using crs_graph_type = Tpetra::CrsGraph<LO, GO, Node>;
     using row_graph_type = Tpetra::RowGraph<LO, GO, Node>;
     using map_type = Tpetra::Map<LO, GO, Node>;
+#else
+    using crs_graph_type = Tpetra::CrsGraph<Node>;
+    using row_graph_type = Tpetra::RowGraph<Node>;
+    using map_type = Tpetra::Map<Node>;
+#endif
 
     out << "CrsGrap EmptyGraphAlloc0 test" << endl;
     Teuchos::OSTab tab0 (out);
@@ -556,10 +620,19 @@ namespace { // (anonymous)
     TEST_EQUALITY_CONST( globalSuccess_int, 0 );
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, EmptyGraphAlloc1, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, EmptyGraphAlloc1, Node )
+#endif
   {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     typedef Tpetra::CrsGraph<LO, GO, Node> graph_type;
     using map_type = Tpetra::Map<LO, GO, Node>;
+#else
+    typedef Tpetra::CrsGraph<Node> graph_type;
+    using map_type = Tpetra::Map<Node>;
+#endif
 
     const GST INVALID = Teuchos::OrdinalTraits<GST>::invalid ();
     const size_t STINV = Teuchos::OrdinalTraits<size_t>::invalid();
@@ -570,7 +643,11 @@ namespace { // (anonymous)
     const size_t numLocal = 10;
     RCP<const map_type> map = rcp (new map_type (INVALID, numLocal, 0, comm));
     // create the empty graph
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Tpetra::RowGraph<LO,GO,Node> > zero;
+#else
+    RCP<Tpetra::RowGraph<Node> > zero;
+#endif
 
     // allocated with space for one entry per row
     RCP<graph_type> zero_crs = rcp (new graph_type (map,1));
@@ -598,10 +675,19 @@ namespace { // (anonymous)
     TEST_EQUALITY_CONST( globalSuccess_int, 0 );
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, DottedDiag, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, DottedDiag, Node )
+#endif
   {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using GRAPH = Tpetra::CrsGraph<LO, GO, Node>;
     using map_type = Tpetra::Map<LO, GO, Node>;
+#else
+    using GRAPH = Tpetra::CrsGraph<Node>;
+    using map_type = Tpetra::Map<Node>;
+#endif
 
     const GST INVALID = Teuchos::OrdinalTraits<GST>::invalid ();
     // get a comm
@@ -654,12 +740,21 @@ namespace { // (anonymous)
     TEST_EQUALITY_CONST( globalSuccess_int, 0 );
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, NonLocals, LO, GO , Node )
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( CrsGraph, NonLocals, Node )
+#endif
   {
     using Teuchos::as;
     using std::endl;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using GRAPH = Tpetra::CrsGraph<LO, GO, Node>;
     using map_type = Tpetra::Map<LO, GO, Node>;
+#else
+    using GRAPH = Tpetra::CrsGraph<Node>;
+    using map_type = Tpetra::Map<Node>;
+#endif
     const GST INVALID = Teuchos::OrdinalTraits<GST>::invalid ();
 
     out << "Tpetra::CrsGraph: Test insert into nonowned rows" << endl;
@@ -835,6 +930,7 @@ namespace { // (anonymous)
 
 // Tests to build and run.  We will instantiate them over all enabled
 // LocalOrdinal (LO), GlobalOrdinal (GO), and Node (NODE) types.
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
 #define UNIT_TEST_GROUP( LO, GO, NODE ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, EmptyGraphAlloc0,   LO, GO, NODE ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, EmptyGraphAlloc1,   LO, GO, NODE ) \
@@ -846,6 +942,19 @@ namespace { // (anonymous)
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, WithStaticProfile,  LO, GO, NODE ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, CopiesAndViews,     LO, GO, NODE ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, BadGIDs,            LO, GO, NODE )
+#else
+#define UNIT_TEST_GROUP(NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, EmptyGraphAlloc0, NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, EmptyGraphAlloc1, NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, ExcessAllocation, NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, BadConst, NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, insert_remove_LIDs, NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, NonLocals, NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, DottedDiag, NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, WithStaticProfile, NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, CopiesAndViews, NODE ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( CrsGraph, BadGIDs, NODE )
+#endif
 
   TPETRA_ETI_MANGLING_TYPEDEFS()
 

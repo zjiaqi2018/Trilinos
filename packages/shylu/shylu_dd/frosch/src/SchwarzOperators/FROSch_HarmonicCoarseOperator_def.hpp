@@ -51,13 +51,26 @@ namespace FROSch {
     using namespace Teuchos;
     using namespace Xpetra;
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     HarmonicCoarseOperator<SC,LO,GO,NO>::HarmonicCoarseOperator(ConstXMatrixPtr k,
+#else
+    template <class SC,class NO>
+    HarmonicCoarseOperator<SC,NO>::HarmonicCoarseOperator(ConstXMatrixPtr k,
+#endif
                                                                 ParameterListPtr parameterList) :
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     CoarseOperator<SC,LO,GO,NO> (k,parameterList),
+#else
+    CoarseOperator<SC,NO> (k,parameterList),
+#endif
     ExtensionSolver_ (),
     InterfaceCoarseSpaces_ (0),
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     AssembledInterfaceCoarseSpace_ (new CoarseSpace<SC,LO,GO,NO>(this->MpiComm_,this->SerialComm_)),
+#else
+    AssembledInterfaceCoarseSpace_ (new CoarseSpace<SC,NO>(this->MpiComm_,this->SerialComm_)),
+#endif
     Dimensions_ (0),
     DofsPerNode_ (0),
     GammaDofs_ (0),
@@ -69,8 +82,13 @@ namespace FROSch {
         FROSCH_TIMER_START_LEVELID(harmonicCoarseOperatorTime,"HarmonicCoarseOperator::HarmonicCoarseOperator");
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     typename HarmonicCoarseOperator<SC,LO,GO,NO>::XMapPtr HarmonicCoarseOperator<SC,LO,GO,NO>::computeCoarseSpace(CoarseSpacePtr coarseSpace)
+#else
+    template <class SC,class NO>
+    typename HarmonicCoarseOperator<SC,NO>::XMapPtr HarmonicCoarseOperator<SC,NO>::computeCoarseSpace(CoarseSpacePtr coarseSpace)
+#endif
     {
         FROSCH_TIMER_START_LEVELID(computeCoarseSpaceTime,"HarmonicCoarseOperator::computeCoarseSpace");
         XMapPtr repeatedMap = AssembleSubdomainMap(NumberOfBlocks_,DofsMaps_,DofsPerNode_);
@@ -121,8 +139,13 @@ namespace FROSch {
     }
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int HarmonicCoarseOperator<SC,LO,GO,NO>::assembleInterfaceCoarseSpace()
+#else
+    template <class SC,class NO>
+    int HarmonicCoarseOperator<SC,NO>::assembleInterfaceCoarseSpace()
+#endif
     {
         FROSCH_TIMER_START_LEVELID(assembleInterfaceCoarseSpaceTime,"HarmonicCoarseOperator::assembleInterfaceCoarseSpace");
         LO ii=0;
@@ -139,8 +162,13 @@ namespace FROSch {
         return this->AssembledInterfaceCoarseSpace_->assembleCoarseSpace();
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int HarmonicCoarseOperator<SC,LO,GO,NO>::addZeroCoarseSpaceBlock(ConstXMapPtr dofsMap)
+#else
+    template <class SC,class NO>
+    int HarmonicCoarseOperator<SC,NO>::addZeroCoarseSpaceBlock(ConstXMapPtr dofsMap)
+#endif
     {
         FROSCH_TIMER_START_LEVELID(addZeroCoarseSpaceBlockTime,"HarmonicCoarseOperator::addZeroCoarseSpaceBlock");
         // Das könnte man noch ändern
@@ -168,11 +196,20 @@ namespace FROSch {
         XMultiVectorPtr mVPhiGamma;
         XMapPtr blockCoarseMap;
         if (useForCoarseSpace) {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
             InterfaceCoarseSpaces_[blockId].reset(new CoarseSpace<SC,LO,GO,NO>(this->MpiComm_,this->SerialComm_));
+#else
+            InterfaceCoarseSpaces_[blockId].reset(new CoarseSpace<SC,NO>(this->MpiComm_,this->SerialComm_));
+#endif
 
             //Epetra_SerialComm serialComm;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
             XMapPtr serialGammaMap = MapFactory<LO,GO,NO>::Build(dofsMap->lib(),dofsMap->getNodeNumElements(),0,this->SerialComm_);
             mVPhiGamma = MultiVectorFactory<LO,GO,NO>::Build(serialGammaMap,dofsMap->getNodeNumElements());
+#else
+            XMapPtr serialGammaMap = MapFactory<NO>::Build(dofsMap->lib(),dofsMap->getNodeNumElements(),0,this->SerialComm_);
+            mVPhiGamma = MultiVectorFactory<NO>::Build(serialGammaMap,dofsMap->getNodeNumElements());
+#endif
         }
 
         for (int i=0; i<dofsMap->getNodeNumElements(); i++) {
@@ -186,7 +223,11 @@ namespace FROSch {
         IDofs_[blockId] = LOVecPtr(0);
 
         if (useForCoarseSpace) {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
             blockCoarseMap = MapFactory<LO,GO,NO>::Build(dofsMap->lib(),-1,GammaDofs_[blockId](),0,this->MpiComm_);
+#else
+            blockCoarseMap = MapFactory<NO>::Build(dofsMap->lib(),-1,GammaDofs_[blockId](),0,this->MpiComm_);
+#endif
 
             InterfaceCoarseSpaces_[blockId]->addSubspace(blockCoarseMap,mVPhiGamma);
             InterfaceCoarseSpaces_[blockId]->assembleCoarseSpace();
@@ -200,8 +241,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int HarmonicCoarseOperator<SC,LO,GO,NO>::computeVolumeFunctions(UN blockId,
+#else
+    template <class SC,class NO>
+    int HarmonicCoarseOperator<SC,NO>::computeVolumeFunctions(UN blockId,
+#endif
                                                                     UN dimension,
                                                                     ConstXMapPtr nodesMap,
                                                                     ConstXMultiVectorPtr nodeList,
@@ -230,7 +276,11 @@ namespace FROSch {
         }
 
         if (useForCoarseSpace) {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
             InterfaceCoarseSpaces_[blockId].reset(new CoarseSpace<SC,LO,GO,NO>(this->MpiComm_,this->SerialComm_));
+#else
+            InterfaceCoarseSpaces_[blockId].reset(new CoarseSpace<SC,NO>(this->MpiComm_,this->SerialComm_));
+#endif
 
             interior->buildEntityMap(nodesMap);
 
@@ -279,16 +329,29 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     typename HarmonicCoarseOperator<SC,LO,GO,NO>::XMultiVectorPtrVecPtr HarmonicCoarseOperator<SC,LO,GO,NO>::computeTranslations(UN blockId,
+#else
+    template <class SC,class NO>
+    typename HarmonicCoarseOperator<SC,NO>::XMultiVectorPtrVecPtr HarmonicCoarseOperator<SC,NO>::computeTranslations(UN blockId,
+#endif
                                                                                                                                  EntitySetConstPtr entitySet)
     {
         FROSCH_TIMER_START_LEVELID(computeTranslationsTime,"HarmonicCoarseOperator::computeTranslations");
         XMultiVectorPtrVecPtr translations(this->DofsPerNode_[blockId]);
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         XMapPtr serialGammaMap = MapFactory<LO,GO,NO>::Build(this->K_->getRangeMap()->lib(),this->GammaDofs_[blockId].size(),0,this->SerialComm_);
+#else
+        XMapPtr serialGammaMap = MapFactory<NO>::Build(this->K_->getRangeMap()->lib(),this->GammaDofs_[blockId].size(),0,this->SerialComm_);
+#endif
         for (UN i=0; i<this->DofsPerNode_[blockId]; i++) {
             if (entitySet->getNumEntities()>0) {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
                 translations[i] = MultiVectorFactory<SC,LO,GO,NO>::Build(serialGammaMap,entitySet->getNumEntities());
+#else
+                translations[i] = MultiVectorFactory<SC,NO>::Build(serialGammaMap,entitySet->getNumEntities());
+#endif
             } else {
                 translations[i] = null;
             }
@@ -305,8 +368,13 @@ namespace FROSch {
     }
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     typename HarmonicCoarseOperator<SC,LO,GO,NO>::XMapPtr HarmonicCoarseOperator<SC,LO,GO,NO>::assembleCoarseMap()
+#else
+    template <class SC,class NO>
+    typename HarmonicCoarseOperator<SC,NO>::XMapPtr HarmonicCoarseOperator<SC,NO>::assembleCoarseMap()
+#endif
     {
         FROSCH_TIMER_START_LEVELID(assembleCoarseMapTime,"HarmonicCoarseOperator::assembleCoarseMap");
         GOVec mapVector(0);
@@ -323,12 +391,21 @@ namespace FROSch {
                 }
             }
         }
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         return MapFactory<LO,GO,NO>::Build(DofsMaps_[0][0]->lib(),-1,mapVector(),0,this->MpiComm_);
+#else
+        return MapFactory<NO>::Build(DofsMaps_[0][0]->lib(),-1,mapVector(),0,this->MpiComm_);
+#endif
     }
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     typename HarmonicCoarseOperator<SC,LO,GO,NO>::XMultiVectorPtrVecPtr HarmonicCoarseOperator<SC,LO,GO,NO>::computeRotations(UN blockId,
+#else
+    template <class SC,class NO>
+    typename HarmonicCoarseOperator<SC,NO>::XMultiVectorPtrVecPtr HarmonicCoarseOperator<SC,NO>::computeRotations(UN blockId,
+#endif
                                                                                                                               UN dimension,
                                                                                                                               ConstXMultiVectorPtr nodeList,
                                                                                                                               EntitySetConstPtr entitySet,
@@ -355,10 +432,18 @@ namespace FROSch {
         }
 
         XMultiVectorPtrVecPtr rotations(rotationsPerEntity);
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         XMapPtr serialGammaMap = MapFactory<LO,GO,NO>::Build(this->K_->getRangeMap()->lib(),this->GammaDofs_[blockId].size(),0,this->SerialComm_);
+#else
+        XMapPtr serialGammaMap = MapFactory<NO>::Build(this->K_->getRangeMap()->lib(),this->GammaDofs_[blockId].size(),0,this->SerialComm_);
+#endif
         for (UN i=0; i<rotationsPerEntity; i++) {
             if (entitySet->getNumEntities()>0) {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
                 rotations[i] = MultiVectorFactory<SC,LO,GO,NO>::Build(serialGammaMap,entitySet->getNumEntities());
+#else
+                rotations[i] = MultiVectorFactory<SC,NO>::Build(serialGammaMap,entitySet->getNumEntities());
+#endif
             } else {
                 rotations[i] = null;
             }
@@ -489,8 +574,13 @@ namespace FROSch {
         return rotations;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     typename HarmonicCoarseOperator<SC,LO,GO,NO>::LOVecPtr HarmonicCoarseOperator<SC,LO,GO,NO>::detectLinearDependencies(GOVecView indicesGammaDofsAll,
+#else
+    template <class SC,class NO>
+    typename HarmonicCoarseOperator<SC,NO>::LOVecPtr HarmonicCoarseOperator<SC,NO>::detectLinearDependencies(GOVecView indicesGammaDofsAll,
+#endif
                                                                                                                          ConstXMapPtr rowMap,
                                                                                                                          ConstXMapPtr rangeMap,
                                                                                                                          ConstXMapPtr repeatedMap,
@@ -500,7 +590,11 @@ namespace FROSch {
         LOVecPtr linearDependentVectors(AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements()); //if (this->Verbose_) cout << AssembledInterfaceCoarseSpace_->getAssembledBasis()->getNumVectors() << " " << AssembledInterfaceCoarseSpace_->getAssembledBasis()->getLocalLength() << " " << indicesGammaDofsAll.size() << endl;
         if (AssembledInterfaceCoarseSpace_->getAssembledBasis()->getNumVectors()>0 && AssembledInterfaceCoarseSpace_->getAssembledBasis()->getLocalLength()>0) {
             //Construct matrix phiGamma
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
             XMatrixPtr phiGamma = MatrixFactory<SC,LO,GO,NO>::Build(rowMap,AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
+#else
+            XMatrixPtr phiGamma = MatrixFactory<SC,NO>::Build(rowMap,AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
+#endif
 
             LO iD;
             SC valueTmp;
@@ -524,7 +618,11 @@ namespace FROSch {
 
             //Compute Phi^T * Phi
             RCP<FancyOStream> fancy = fancyOStream(rcpFromRef(cout));
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
             XMatrixPtr phiTPhi = MatrixMatrix<SC,LO,GO,NO>::Multiply(*phiGamma,true,*phiGamma,false,*fancy); //phiGamma->describe(*fancy,VERB_EXTREME); phiTPhi->describe(*fancy,VERB_EXTREME); //AssembledInterfaceCoarseSpace_->getBasisMap()->describe(*fancy,VERB_EXTREME);
+#else
+            XMatrixPtr phiTPhi = MatrixMatrix<SC,NO>::Multiply(*phiGamma,true,*phiGamma,false,*fancy); //phiGamma->describe(*fancy,VERB_EXTREME); phiTPhi->describe(*fancy,VERB_EXTREME); //AssembledInterfaceCoarseSpace_->getBasisMap()->describe(*fancy,VERB_EXTREME);
+#endif
 
             // Extract local part of the matrix
             ConstXMatrixPtr repeatedPhiTPhi = ExtractLocalSubdomainMatrix(phiTPhi.getConst(),AssembledInterfaceCoarseSpace_->getBasisMap());
@@ -660,8 +758,13 @@ namespace FROSch {
         return linearDependentVectors;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     typename HarmonicCoarseOperator<SC,LO,GO,NO>::XMultiVectorPtr HarmonicCoarseOperator<SC,LO,GO,NO>::computeExtensions(ConstXMapPtr localMap,
+#else
+    template <class SC,class NO>
+    typename HarmonicCoarseOperator<SC,NO>::XMultiVectorPtr HarmonicCoarseOperator<SC,NO>::computeExtensions(ConstXMapPtr localMap,
+#endif
                                                                                                                          GOVecView indicesGammaDofsAll,
                                                                                                                          GOVecView indicesIDofsAll,
                                                                                                                          XMatrixPtr kII,
@@ -669,12 +772,22 @@ namespace FROSch {
     {
         FROSCH_TIMER_START_LEVELID(computeExtensionsTime,"HarmonicCoarseOperator::computeExtensions");
         //this->Phi_ = MatrixFactory<SC,LO,GO,NO>::Build(this->K_->getRangeMap(),AssembledInterfaceCoarseSpace_->getBasisMap(),AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements()); // Nonzeroes abhängig von dim/dofs!!!
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         XMultiVectorPtr mVPhi = MultiVectorFactory<SC,LO,GO,NO>::Build(localMap,AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
         XMultiVectorPtr mVtmp = MultiVectorFactory<SC,LO,GO,NO>::Build(kII->getRowMap(),AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
         XMultiVectorPtr mVPhiI = MultiVectorFactory<SC,LO,GO,NO>::Build(kII->getRowMap(),AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
+#else
+        XMultiVectorPtr mVPhi = MultiVectorFactory<SC,NO>::Build(localMap,AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
+        XMultiVectorPtr mVtmp = MultiVectorFactory<SC,NO>::Build(kII->getRowMap(),AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
+        XMultiVectorPtr mVPhiI = MultiVectorFactory<SC,NO>::Build(kII->getRowMap(),AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
+#endif
 
         //Build mVPhiGamma
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         XMultiVectorPtr mVPhiGamma = MultiVectorFactory<SC,LO,GO,NO>::Build(kIGamma->getDomainMap(),AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
+#else
+        XMultiVectorPtr mVPhiGamma = MultiVectorFactory<SC,NO>::Build(kIGamma->getDomainMap(),AssembledInterfaceCoarseSpace_->getBasisMap()->getNodeNumElements());
+#endif
         if (AssembledInterfaceCoarseSpace_->hasAssembledBasis()) {
             for (UN i=0; i<AssembledInterfaceCoarseSpace_->getAssembledBasis()->getNumVectors(); i++) {
                 ConstSCVecPtr assembledInterfaceCoarseSpaceData = AssembledInterfaceCoarseSpace_->getAssembledBasis()->getData(i);
@@ -712,7 +825,11 @@ namespace FROSch {
 
         // Jetzt der solver für kII
         if (indicesIDofsAll.size()>0) {
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
             ExtensionSolver_.reset(new SubdomainSolver<SC,LO,GO,NO>(kII,sublist(this->ParameterList_,"ExtensionSolver")));
+#else
+            ExtensionSolver_.reset(new SubdomainSolver<SC,NO>(kII,sublist(this->ParameterList_,"ExtensionSolver")));
+#endif
             ExtensionSolver_->initialize();
             ExtensionSolver_->compute();
             ExtensionSolver_->apply(*mVtmp,*mVPhiI);
@@ -763,8 +880,13 @@ namespace FROSch {
         return mVPhi;
     }
     // REPMAP-------------------------------------
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template<class SC,class LO, class GO, class NO>
     int HarmonicCoarseOperator<SC,LO,GO,NO>::buildGlobalGraph(Teuchos::RCP<DDInterface<SC,LO,GO,NO> > theDDInterface)
+#else
+    template<class SC, class NO>
+    int HarmonicCoarseOperator<SC,NO>::buildGlobalGraph(Teuchos::RCP<DDInterface<SC,NO> > theDDInterface)
+#endif
     {
       FROSCH_TIMER_START_LEVELID(buildGlobalGraphTime,"HarmonicCoarseOperator::buildGlobalGraph");
       std::map<GO,int> rep;
@@ -793,21 +915,34 @@ namespace FROSch {
          }
        }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
        Teuchos::RCP<Xpetra::Map<LO,GO,NO> > graphMap = Xpetra::MapFactory<LO,GO,NO>::Build(this->K_->getMap()->lib(),-1,1,0,this->K_->getMap()->getComm());
+#else
+       Teuchos::RCP<Xpetra::Map<NO> > graphMap = Xpetra::MapFactory<NO>::Build(this->K_->getMap()->lib(),-1,1,0,this->K_->getMap()->getComm());
+#endif
 
        //UN maxNumElements = -1;
        //get the maximum number of neighbors for a subdomain
        MaxNumNeigh_ = -1;
        UN numElementsLocal = entries.size();
        reduceAll(*this->MpiComm_,Teuchos::REDUCE_MAX,numElementsLocal,Teuchos::ptr(&MaxNumNeigh_));
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
        this->SubdomainConnectGraph_ = Xpetra::CrsGraphFactory<LO,GO,NO>::Build(graphMap,MaxNumNeigh_);
+#else
+       this->SubdomainConnectGraph_ = Xpetra::CrsGraphFactory<NO>::Build(graphMap,MaxNumNeigh_);
+#endif
        this->SubdomainConnectGraph_->insertGlobalIndices(graphMap->getComm()->getRank(),entries());
 
        return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO, class NO>
     int HarmonicCoarseOperator<SC,LO,GO,NO>::buildElementNodeList()
+#else
+    template <class SC, class NO>
+    int HarmonicCoarseOperator<SC,NO>::buildElementNodeList()
+#endif
     {
       //get elements belonging to one subdomain
       FROSCH_TIMER_START_LEVELID(buildElementNodeListTime,"CoarseOperator::buildElementNodeList");
@@ -819,7 +954,11 @@ namespace FROSch {
       reduceAll(*this->MpiComm_,Teuchos::REDUCE_MAX,numElementsLocal,Teuchos::ptr(&maxNumElements));
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       GraphPtr elemGraph = Xpetra::CrsGraphFactory<LO,GO,NO>::Build(this->MLGatheringMaps_[0],maxNumElements);
+#else
+      GraphPtr elemGraph = Xpetra::CrsGraphFactory<NO>::Build(this->MLGatheringMaps_[0],maxNumElements);
+#endif
       Teuchos::ArrayView<const GO> myGlobals = this->SubdomainConnectGraph_->getRowMap()->getNodeElementList();
 
       for (size_t i = 0; i < this->SubdomainConnectGraph_->getRowMap()->getNodeNumElements(); i++) {
@@ -827,7 +966,11 @@ namespace FROSch {
       }
       elemGraph->fillComplete();
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       GraphPtr tmpElemGraph = Xpetra::CrsGraphFactory<LO,GO,NO>::Build(this->MLGatheringMaps_[1],maxNumElements);
+#else
+      GraphPtr tmpElemGraph = Xpetra::CrsGraphFactory<NO>::Build(this->MLGatheringMaps_[1],maxNumElements);
+#endif
       GraphPtr elemSGraph;
       //communicate ElemGrapg to CoarseComm_
       tmpElemGraph->doExport(*elemGraph,*this->MLCoarseSolveExporters_[1],Xpetra::INSERT);
@@ -836,7 +979,11 @@ namespace FROSch {
         gathered = 1;
         tmpElemGraph->fillComplete();
         elemSGraph = tmpElemGraph;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         tmpElemGraph = Xpetra::CrsGraphFactory<LO,GO,NO>::Build(this->MLGatheringMaps_[i],maxNumElements);
+#else
+        tmpElemGraph = Xpetra::CrsGraphFactory<NO>::Build(this->MLGatheringMaps_[i],maxNumElements);
+#endif
         tmpElemGraph->doExport(*elemSGraph,*this->MLCoarseSolveExporters_[i],Xpetra::INSERT);
       }
       //tmpElemGraph->fillComplete();
@@ -845,7 +992,11 @@ namespace FROSch {
       if(gathered == 0){
         elemSGraph = tmpElemGraph;
       }
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       this->ElementNodeList_ =Xpetra::CrsGraphFactory<LO,GO,NO>::Build(this->MLCoarseMap_,maxNumElements);
+#else
+      this->ElementNodeList_ =Xpetra::CrsGraphFactory<NO>::Build(this->MLCoarseMap_,maxNumElements);
+#endif
 
       if(this->OnCoarseSolveComm_){
         const size_t numMyElementS = this->MLCoarseMap_->getNodeNumElements();
@@ -862,14 +1013,23 @@ namespace FROSch {
       return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO, class GO,class NO>
     int HarmonicCoarseOperator<SC,LO,GO,NO>::buildCoarseGraph()
+#else
+    template <class SC,class NO>
+    int HarmonicCoarseOperator<SC,NO>::buildCoarseGraph()
+#endif
     {
       //bring graph to CoarseSolveComm_
       FROSCH_TIMER_START_LEVELID(buildCoarseGraphTime,"CoarseOperator::buildCoarseGraph");
 
       //create temporary graphs to perform communication (possibly with gathering steps)
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       GraphPtr tmpGraph =  Xpetra::CrsGraphFactory<LO,GO,NO>::Build(this->MLGatheringMaps_[1],MaxNumNeigh_);;
+#else
+      GraphPtr tmpGraph =  Xpetra::CrsGraphFactory<NO>::Build(this->MLGatheringMaps_[1],MaxNumNeigh_);;
+#endif
       GraphPtr tmpGraphGathering;
 
       tmpGraph->doExport(*this->SubdomainConnectGraph_,*this->MLCoarseSolveExporters_[1],Xpetra::INSERT);
@@ -877,11 +1037,19 @@ namespace FROSch {
       for(int i  = 2;i<this->MLGatheringMaps_.size();i++){
         tmpGraph->fillComplete();
         tmpGraphGathering = tmpGraph;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         tmpGraph = Xpetra::CrsGraphFactory<LO,GO,NO>::Build(this->MLGatheringMaps_[i],MaxNumNeigh_);
+#else
+        tmpGraph = Xpetra::CrsGraphFactory<NO>::Build(this->MLGatheringMaps_[i],MaxNumNeigh_);
+#endif
         tmpGraph->doExport(*tmpGraphGathering,*this->MLCoarseSolveExporters_[i],Xpetra::INSERT);
      }
      const size_t numMyElementS = this->MLGatheringMaps_[this->MLGatheringMaps_.size()-1]->getNodeNumElements();
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
      this->SubdomainConnectGraph_= Xpetra::CrsGraphFactory<LO,GO,NO>::Build(this->MLCoarseMap_,MaxNumNeigh_);
+#else
+     this->SubdomainConnectGraph_= Xpetra::CrsGraphFactory<NO>::Build(this->MLCoarseMap_,MaxNumNeigh_);
+#endif
 
      if (this->OnCoarseSolveComm_) {
        for (size_t k = 0; k<numMyElementS; k++) {

@@ -50,16 +50,30 @@ namespace FROSch {
     using namespace Teuchos;
     using namespace Xpetra;
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     GDSWCoarseOperator<SC,LO,GO,NO>::GDSWCoarseOperator(ConstXMatrixPtr k,
+#else
+    template <class SC,class NO>
+    GDSWCoarseOperator<SC,NO>::GDSWCoarseOperator(ConstXMatrixPtr k,
+#endif
                                                         ParameterListPtr parameterList) :
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     HarmonicCoarseOperator<SC,LO,GO,NO> (k,parameterList)
+#else
+    HarmonicCoarseOperator<SC,NO> (k,parameterList)
+#endif
     {
         FROSCH_TIMER_START_LEVELID(gDSWCoarseOperatorTime,"GDSWCoarseOperator::GDSWCoarseOperator");
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::initialize(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::initialize(UN dimension,
+#endif
                                                     ConstXMapPtr repeatedMap)
     {
         FROSCH_TIMER_START_LEVELID(initializeTime,"GDSWCoarseOperator::initialize");
@@ -71,8 +85,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::initialize(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::initialize(UN dimension,
+#endif
                                                     ConstXMapPtr repeatedMap,
                                                     GOVecPtr dirichletBoundaryDofs)
     {
@@ -85,8 +104,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::initialize(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::initialize(UN dimension,
+#endif
                                                     UN dofsPerNode,
                                                     ConstXMapPtr repeatedNodesMap,
                                                     ConstXMapPtrVecPtr repeatedDofMaps)
@@ -100,8 +124,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::initialize(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::initialize(UN dimension,
+#endif
                                                     UN dofsPerNode,
                                                     ConstXMapPtr repeatedNodesMap,
                                                     ConstXMapPtrVecPtr repeatedDofMaps,
@@ -116,8 +145,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::initialize(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::initialize(UN dimension,
+#endif
                                                     UN dofsPerNode,
                                                     ConstXMapPtr repeatedNodesMap,
                                                     ConstXMapPtrVecPtr repeatedDofMaps,
@@ -132,8 +166,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::initialize(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::initialize(UN dimension,
+#endif
                                                     UN dofsPerNode,
                                                     ConstXMapPtr repeatedNodesMap,
                                                     ConstXMapPtrVecPtr repeatedDofMaps,
@@ -148,8 +187,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::initialize(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::initialize(UN dimension,
+#endif
                                                     UNVecPtr dofsPerNodeVec,
                                                     ConstXMapPtrVecPtr repeatedNodesMapVec,
                                                     ConstXMapPtrVecPtr2D repeatedDofMapsVec,
@@ -165,21 +209,36 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     void GDSWCoarseOperator<SC,LO,GO,NO>::describe(FancyOStream &out,
+#else
+    template <class SC,class NO>
+    void GDSWCoarseOperator<SC,NO>::describe(FancyOStream &out,
+#endif
                                                    const EVerbosityLevel verbLevel) const
     {
         FROSCH_ASSERT(false,"describe() has to be implemented properly...");
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     string GDSWCoarseOperator<SC,LO,GO,NO>::description() const
+#else
+    template <class SC,class NO>
+    string GDSWCoarseOperator<SC,NO>::description() const
+#endif
     {
         return "GDSW Coarse Operator";
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::buildCoarseSpace(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::buildCoarseSpace(UN dimension,
+#endif
                                                           ConstXMapPtr nodesMap)
     {
         ConstXMapPtrVecPtr dofsMaps(1);
@@ -189,8 +248,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::buildCoarseSpace(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::buildCoarseSpace(UN dimension,
+#endif
                                                           ConstXMapPtr nodesMap,
                                                           GOVecPtr dirichletBoundaryDofs)
     {
@@ -201,8 +265,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::buildCoarseSpace(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::buildCoarseSpace(UN dimension,
+#endif
                                                           UN dofsPerNode,
                                                           ConstXMapPtr nodesMap,
                                                           ConstXMapPtrVecPtr dofsMaps)
@@ -221,8 +290,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::buildCoarseSpace(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::buildCoarseSpace(UN dimension,
+#endif
                                                           UN dofsPerNode,
                                                           ConstXMapPtr nodesMap,
                                                           ConstXMapPtrVecPtr dofsMaps,
@@ -234,8 +308,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::buildCoarseSpace(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::buildCoarseSpace(UN dimension,
+#endif
                                                           UN dofsPerNode,
                                                           ConstXMapPtr nodesMap,
                                                           ConstXMapPtrVecPtr dofsMaps,
@@ -255,8 +334,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::buildCoarseSpace(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::buildCoarseSpace(UN dimension,
+#endif
                                                           UN dofsPerNode,
                                                           ConstXMapPtr nodesMap,
                                                           ConstXMapPtrVecPtr dofsMaps,
@@ -282,8 +366,13 @@ namespace FROSch {
 
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::buildCoarseSpace(UN dimension,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::buildCoarseSpace(UN dimension,
+#endif
                                                           UNVecPtr dofsPerNodeVec,
                                                           ConstXMapPtrVecPtr repeatedNodesMapVec,
                                                           ConstXMapPtrVecPtr2D repeatedDofMapsVec,
@@ -306,8 +395,13 @@ namespace FROSch {
     }
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template <class SC,class LO,class GO,class NO>
     int GDSWCoarseOperator<SC,LO,GO,NO>::resetCoarseSpaceBlock(UN blockId,
+#else
+    template <class SC,class NO>
+    int GDSWCoarseOperator<SC,NO>::resetCoarseSpaceBlock(UN blockId,
+#endif
                                                                UN dimension,
                                                                UN dofsPerNode,
                                                                ConstXMapPtr nodesMap,
@@ -390,7 +484,11 @@ namespace FROSch {
         Array<GO> tmpDirichletBoundaryDofs(dirichletBoundaryDofs()); // Here, we do a copy. Maybe, this is not necessary
         sortunique(tmpDirichletBoundaryDofs);
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         DDInterface_.reset(new DDInterface<SC,LO,GO,NO>(dimension,this->DofsPerNode_[blockId],nodesMap.getConst(),verbosity,this->LevelID_,communicationStrategy));
+#else
+        DDInterface_.reset(new DDInterface<SC,NO>(dimension,this->DofsPerNode_[blockId],nodesMap.getConst(),verbosity,this->LevelID_,communicationStrategy));
+#endif
         DDInterface_->resetGlobalDofs(dofsMaps);
         DDInterface_->removeDirichletNodes(tmpDirichletBoundaryDofs());
 
@@ -413,7 +511,11 @@ namespace FROSch {
                 }
             }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
             this->InterfaceCoarseSpaces_[blockId].reset(new CoarseSpace<SC,LO,GO,NO>(this->MpiComm_,this->SerialComm_));
+#else
+            this->InterfaceCoarseSpaces_[blockId].reset(new CoarseSpace<SC,NO>(this->MpiComm_,this->SerialComm_));
+#endif
 
             if (useForCoarseSpace && (useVertexTranslations||useShortEdgeTranslations||useShortEdgeRotations||useStraightEdgeTranslations||useStraightEdgeRotations||useEdgeTranslations||useEdgeRotations||useFaceTranslations||useFaceRotations)) {
 
@@ -562,8 +664,13 @@ namespace FROSch {
         return 0;
     }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     template<class SC,class LO,class GO,class NO>
     typename GDSWCoarseOperator<SC,LO,GO,NO>::XMapPtr GDSWCoarseOperator<SC,LO,GO,NO>::BuildRepeatedMapCoarseLevel(ConstXMapPtr &nodesMap,
+#else
+    template<class SC,class NO>
+    typename GDSWCoarseOperator<SC,NO>::XMapPtr GDSWCoarseOperator<SC,NO>::BuildRepeatedMapCoarseLevel(ConstXMapPtr &nodesMap,
+#endif
                                                 UN dofsPerNode,
                                                 ConstXMapPtrVecPtr dofsMaps,
                                                 UN partitionType)

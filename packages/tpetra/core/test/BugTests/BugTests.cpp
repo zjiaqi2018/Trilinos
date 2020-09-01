@@ -117,7 +117,11 @@ namespace {
       // this is what the file looks like: 1 3 4 9
       RCP<const map_type> rng = Tpetra::createUniformContigMap<LO, GO>(1,comm);
       RCP<const map_type> dom = Tpetra::createUniformContigMap<LO, GO>(4,comm);
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       RCP<crs_matrix_type> A = Tpetra::createCrsMatrix<SC, LO, GO>(rng, 4);
+#else
+      RCP<crs_matrix_type> A = Tpetra::createCrsMatrix<SC>(rng, 4);
+#endif
       if (myImageID == 0) {
         A->insertGlobalValues( 0, Teuchos::tuple<GO>(0,1,2,3), Teuchos::tuple<SC>(1.0,3.0,4.0,9.0) );
       }
@@ -231,8 +235,13 @@ namespace {
       os << *prefix << "Create Vectors" << endl;
       std::cerr << os.str ();
     }
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Vector<SC,LO,GO> > vecIn = Tpetra::createVector<SC>(mapIn);
     RCP<Vector<SC,LO,GO> > vecOut = Tpetra::createVector<SC>(mapOut);
+#else
+    RCP<Vector<SC> > vecIn = Tpetra::createVector<SC>(mapIn);
+    RCP<Vector<SC> > vecOut = Tpetra::createVector<SC>(mapOut);
+#endif
 
     if (verbose) {
       std::ostringstream os;
@@ -264,10 +273,17 @@ namespace {
     using LO = int;
     using GO = Tpetra::Map<>::global_ordinal_type;
     using NodeType = Tpetra::Map<>::node_type;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using TpetraMap = Tpetra::Map<LO,GO,NodeType>;
     using TpetraImport = Tpetra::Import<LO,GO,NodeType>;
     using TpetraExport = Tpetra::Export<LO,GO,NodeType>;
     using TpetraVec = Tpetra::Vector<double,LO,GO,NodeType>;
+#else
+    using TpetraMap = Tpetra::Map<NodeType>;
+    using TpetraImport = Tpetra::Import<NodeType>;
+    using TpetraExport = Tpetra::Export<NodeType>;
+    using TpetraVec = Tpetra::Vector<double,NodeType>;
+#endif
 
     Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
     const int rank = comm->getRank();

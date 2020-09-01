@@ -79,7 +79,11 @@
 
 namespace MueLuTests {
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, Constructor, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, Constructor, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -92,7 +96,11 @@ namespace MueLuTests {
 
   } //Constructor
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, DescriptionCaching, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, DescriptionCaching, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     /*
@@ -108,11 +116,19 @@ namespace MueLuTests {
     out << "version: " << MueLu::Version() << std::endl;
 
     typedef typename Teuchos::ScalarTraits<SC>::magnitudeType real_type;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     typedef typename Xpetra::MultiVector<real_type,LO,GO,NO> RealValuedMultiVector;
+#else
+    typedef typename Xpetra::MultiVector<real_type,NO> RealValuedMultiVector;
+#endif
 
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     int numRows = 399;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(numRows);
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(numRows);
+#endif
     GO nx = numRows;
     Teuchos::ParameterList galeriList;
     galeriList.set("nx", nx);
@@ -130,8 +146,13 @@ namespace MueLuTests {
 
     Teuchos::ParameterList userParamList = MueLuList.sublist("user data");
     userParamList.set<RCP<RealValuedMultiVector> >("Coordinates", coordinates);
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     Teuchos::RCP<MueLu::Hierarchy<Scalar,LocalOrdinal,GlobalOrdinal,Node> > H =
         MueLu::CreateXpetraPreconditioner<Scalar,LocalOrdinal,GlobalOrdinal,Node>(A, MueLuList);
+#else
+    Teuchos::RCP<MueLu::Hierarchy<Scalar,Node> > H =
+        MueLu::CreateXpetraPreconditioner<Scalar,Node>(A, MueLuList);
+#endif
 
     // confirm that we did get a hierarchy with two levels -- a sanity check for this test
     TEST_EQUALITY(2, H->GetGlobalNumLevels());
@@ -155,7 +176,11 @@ namespace MueLuTests {
     TEST_INEQUALITY(descriptionActual, descriptionTwoLevel);
   }//DescriptionCaching
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetAndGetLevel, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetAndGetLevel, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -171,7 +196,11 @@ namespace MueLuTests {
 
   }//SetAndGetLevel
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, GetNumLevels, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, GetNumLevels, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -189,7 +218,11 @@ namespace MueLuTests {
 
   }//GetNumLevels
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, KeepAggregates, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, KeepAggregates, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -197,11 +230,19 @@ namespace MueLuTests {
     out << "version: " << MueLu::Version() << std::endl;
 
     typedef typename Teuchos::ScalarTraits<SC>::magnitudeType real_type;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     typedef typename Xpetra::MultiVector<real_type,LO,GO,NO> RealValuedMultiVector;
+#else
+    typedef typename Xpetra::MultiVector<real_type,NO> RealValuedMultiVector;
+#endif
 
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     GO nx = 399*comm->getSize();
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
     Teuchos::ParameterList galeriList;
     galeriList.set("nx", nx);
     RCP<RealValuedMultiVector> coordinates = Galeri::Xpetra::Utils::CreateCartesianCoordinates<SC,LO,GO,Map,RealValuedMultiVector>("1D", A->getRowMap(), galeriList);
@@ -226,7 +267,11 @@ namespace MueLuTests {
 
   } //FullPopulate_KeepAggregates
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, Iterate, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, Iterate, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -235,7 +280,11 @@ namespace MueLuTests {
     using magnitude_type        = typename Teuchos::ScalarTraits<Scalar>::magnitudeType;
     using TMT                   = Teuchos::ScalarTraits<magnitude_type>;
     using real_type             = typename Teuchos::ScalarTraits<SC>::coordinateType;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using RealValuedMultiVector = Xpetra::MultiVector<real_type,LO,GO,NO>;
+#else
+    using RealValuedMultiVector = Xpetra::MultiVector<real_type,NO>;
+#endif
 
 #   if !defined(HAVE_MUELU_AMESOS) || !defined(HAVE_MUELU_IFPACK)
     MUELU_TESTING_DO_NOT_TEST(Xpetra::UseEpetra, "Amesos, Ifpack");
@@ -249,7 +298,11 @@ namespace MueLuTests {
     //matrix
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     GO nx = 6561*comm->getSize();  //=8*3^6
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> Op = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> Op = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
     RCP<const Map > map = Op->getRowMap();
 
     Teuchos::ParameterList galeriList;
@@ -261,7 +314,11 @@ namespace MueLuTests {
     Teuchos::Array<magnitude_type> norms(1);
     nullSpace->norm1(norms);
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     MueLu::Hierarchy<Scalar, LocalOrdinal, GlobalOrdinal, Node> H;
+#else
+    MueLu::Hierarchy<Scalar, Node> H;
+#endif
     H.setDefaultVerbLevel(Teuchos::VERB_HIGH);
 
     RCP<MueLu::Level> Finest = H.GetLevel();
@@ -284,7 +341,11 @@ namespace MueLuTests {
     RCP<TransPFactory> Rfact  = rcp( new TransPFactory());
     RCP<RAPFactory>    Acfact = rcp( new RAPFactory() );
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<SmootherPrototype> smooProto = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::createSmootherPrototype("Gauss-Seidel", 2);
+#else
+    RCP<SmootherPrototype> smooProto = TestHelpers::TestFactory<Scalar, Node>::createSmootherPrototype("Gauss-Seidel", 2);
+#endif
     RCP<SmootherFactory>    SmooFact = rcp( new SmootherFactory(smooProto) );
     Acfact->setVerbLevel(Teuchos::VERB_HIGH);
 
@@ -334,7 +395,11 @@ namespace MueLuTests {
 
   } //Iterate
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, IterateWithFusedProlongationUpdate, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, IterateWithFusedProlongationUpdate, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -343,7 +408,11 @@ namespace MueLuTests {
     using magnitude_type        = typename Teuchos::ScalarTraits<Scalar>::magnitudeType;
     using TMT                   = Teuchos::ScalarTraits<magnitude_type>;
     using real_type             = typename Teuchos::ScalarTraits<SC>::coordinateType;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using RealValuedMultiVector = Xpetra::MultiVector<real_type,LO,GO,NO>;
+#else
+    using RealValuedMultiVector = Xpetra::MultiVector<real_type,NO>;
+#endif
 
 #   if !defined(HAVE_MUELU_AMESOS) || !defined(HAVE_MUELU_IFPACK)
     MUELU_TESTING_DO_NOT_TEST(Xpetra::UseEpetra, "Amesos, Ifpack");
@@ -357,7 +426,11 @@ namespace MueLuTests {
     //matrix
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     GO nx = 6561*comm->getSize();  //=8*3^6
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> Op = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> Op = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
     RCP<const Map > map = Op->getRowMap();
 
     Teuchos::ParameterList galeriList;
@@ -369,7 +442,11 @@ namespace MueLuTests {
     Teuchos::Array<magnitude_type> norms(1);
     nullSpace->norm1(norms);
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     MueLu::Hierarchy<Scalar, LocalOrdinal, GlobalOrdinal, Node> H;
+#else
+    MueLu::Hierarchy<Scalar, Node> H;
+#endif
     H.setDefaultVerbLevel(Teuchos::VERB_HIGH);
 
     RCP<MueLu::Level> Finest = H.GetLevel();
@@ -392,7 +469,11 @@ namespace MueLuTests {
     RCP<TransPFactory> Rfact  = rcp( new TransPFactory());
     RCP<RAPFactory>    Acfact = rcp( new RAPFactory() );
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<SmootherPrototype> smooProto = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::createSmootherPrototype("Gauss-Seidel", 2);
+#else
+    RCP<SmootherPrototype> smooProto = TestHelpers::TestFactory<Scalar, Node>::createSmootherPrototype("Gauss-Seidel", 2);
+#endif
     RCP<SmootherFactory>    SmooFact = rcp( new SmootherFactory(smooProto) );
     Acfact->setVerbLevel(Teuchos::VERB_HIGH);
 
@@ -443,7 +524,11 @@ namespace MueLuTests {
 
   } //IterateWithFusedProlongationUpdate
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, IterateWithImplicitRestriction, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, IterateWithImplicitRestriction, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -459,12 +544,20 @@ namespace MueLuTests {
     using magnitude_type        = typename Teuchos::ScalarTraits<Scalar>::magnitudeType;
     using TMT                   = Teuchos::ScalarTraits<magnitude_type>;
     using real_type             = typename Teuchos::ScalarTraits<SC>::coordinateType;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using RealValuedMultiVector = Xpetra::MultiVector<real_type,LO,GO,NO>;
+#else
+    using RealValuedMultiVector = Xpetra::MultiVector<real_type,NO>;
+#endif
 
     //matrix
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     GO nx = 6561*comm->getSize();  //=8*3^6
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> Op = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> Op = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
     RCP<const Map > map = Op->getRowMap();
 
     Teuchos::ParameterList galeriList;
@@ -476,7 +569,11 @@ namespace MueLuTests {
     Teuchos::Array<typename TST::magnitudeType> norms(1);
     nullSpace->norm1(norms);
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     MueLu::Hierarchy<Scalar, LocalOrdinal, GlobalOrdinal, Node> H;
+#else
+    MueLu::Hierarchy<Scalar, Node> H;
+#endif
     H.SetImplicitTranspose(true);
     H.setDefaultVerbLevel(Teuchos::VERB_HIGH);
 
@@ -501,7 +598,11 @@ namespace MueLuTests {
     Aclist.set("transpose: use implicit", true);
     Acfact->SetParameterList(Aclist);
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<SmootherPrototype> smooProto = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::createSmootherPrototype("Gauss-Seidel", 2);
+#else
+    RCP<SmootherPrototype> smooProto = TestHelpers::TestFactory<Scalar, Node>::createSmootherPrototype("Gauss-Seidel", 2);
+#endif
     RCP<SmootherFactory>    SmooFact = rcp( new SmootherFactory(smooProto) );
     Acfact->setVerbLevel(Teuchos::VERB_HIGH);
 
@@ -553,7 +654,11 @@ namespace MueLuTests {
 
   } //Iterate
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy1level, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy1level, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -564,7 +669,11 @@ namespace MueLuTests {
 #   endif
 
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(299*comm->getSize());
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(299*comm->getSize());
+#endif
 
     // Multigrid Hierarchy
     Hierarchy H(A);
@@ -597,7 +706,11 @@ namespace MueLuTests {
     H.Iterate(*RHS, *X, iterations);
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy1levelv2, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy1levelv2, Scalar, Node)
+#endif
   {
     //MUELU_TEST_ONLY_FOR(Xpetra::UseTpetra);
 #   include <MueLu_UseShortNames.hpp>
@@ -610,7 +723,11 @@ namespace MueLuTests {
     MUELU_TESTING_DO_NOT_TEST(Xpetra::UseTpetra, "Amesos2, Ifpack2");
 #   endif
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(299*comm->getSize());
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(299*comm->getSize());
+#endif
 
     // Multigrid Hierarchy
     Hierarchy H(A);
@@ -644,7 +761,11 @@ namespace MueLuTests {
   }
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy2level, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy2level, Scalar, Node)
+#endif
   {
     MUELU_TEST_ONLY_FOR(Xpetra::UseEpetra);
 #   include <MueLu_UseShortNames.hpp>
@@ -653,7 +774,11 @@ namespace MueLuTests {
 
 #if defined(HAVE_MUELU_EPETRA) && defined(HAVE_MUELU_AMESOS)
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(299*comm->getSize());
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(299*comm->getSize());
+#endif
 
     // Multigrid Hierarchy
     Hierarchy H(A);
@@ -718,14 +843,22 @@ namespace MueLuTests {
 
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy3level, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy3level, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_LIMIT_SCOPE(Scalar,GlobalOrdinal,Node);
     MUELU_TESTING_SET_OSTREAM;
 
     typedef typename Teuchos::ScalarTraits<SC>::magnitudeType real_type;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     typedef typename Xpetra::MultiVector<real_type,LO,GO,NO> RealValuedMultiVector;
+#else
+    typedef typename Xpetra::MultiVector<real_type,NO> RealValuedMultiVector;
+#endif
 
 #   if !defined(HAVE_MUELU_AMESOS) || !defined(HAVE_MUELU_IFPACK)
     MUELU_TESTING_DO_NOT_TEST(Xpetra::UseEpetra, "Amesos, Ifpack");
@@ -736,7 +869,11 @@ namespace MueLuTests {
 
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     GO nx = 299*comm->getSize();
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
 
     Teuchos::ParameterList galeriList;
     galeriList.set("nx", nx);
@@ -820,14 +957,22 @@ namespace MueLuTests {
   }
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy3level_NoPreSmooth, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy3level_NoPreSmooth, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_LIMIT_SCOPE(Scalar,GlobalOrdinal,Node);
     MUELU_TESTING_SET_OSTREAM;
 
     typedef typename Teuchos::ScalarTraits<SC>::magnitudeType real_type;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     typedef typename Xpetra::MultiVector<real_type,LO,GO,NO> RealValuedMultiVector;
+#else
+    typedef typename Xpetra::MultiVector<real_type,NO> RealValuedMultiVector;
+#endif
 
 #   if !defined(HAVE_MUELU_AMESOS) || !defined(HAVE_MUELU_IFPACK)
     MUELU_TESTING_DO_NOT_TEST(Xpetra::UseEpetra, "Amesos, Ifpack");
@@ -838,7 +983,11 @@ namespace MueLuTests {
 
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     GO nx = 299*comm->getSize();
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
 
     Teuchos::ParameterList galeriList;
     galeriList.set("nx", nx);
@@ -868,7 +1017,11 @@ namespace MueLuTests {
 
     // Here we want no pre-smoothing on levels 0 and 1
     RCP<SmootherPrototype> noSmooProto;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<SmootherPrototype> smooProto = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::createSmootherPrototype("Gauss-Seidel", 2);
+#else
+    RCP<SmootherPrototype> smooProto = TestHelpers::TestFactory<Scalar, Node>::createSmootherPrototype("Gauss-Seidel", 2);
+#endif
     RCP<SmootherFactory>   SmooFact = rcp( new SmootherFactory(noSmooProto,smooProto) );    
     M0.SetFactory("Smoother", SmooFact);
     M1.SetFactory("Smoother", SmooFact);
@@ -926,7 +1079,11 @@ namespace MueLuTests {
     H.Iterate(*RHS, *X, iterations);
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy3levelFacManagers, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchy3levelFacManagers, Scalar, Node)
+#endif
   {
     //MUELU_TEST_ONLY_FOR(Xpetra::UseEpetra)
 #   include <MueLu_UseShortNames.hpp>
@@ -940,11 +1097,19 @@ namespace MueLuTests {
 #   endif
 
     typedef typename Teuchos::ScalarTraits<SC>::magnitudeType real_type;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     typedef typename Xpetra::MultiVector<real_type,LO,GO,NO> RealValuedMultiVector;
+#else
+    typedef typename Xpetra::MultiVector<real_type,NO> RealValuedMultiVector;
+#endif
 
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     GO nx = 299*comm->getSize();
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
 
     Teuchos::ParameterList galeriList;
     galeriList.set("nx", nx);
@@ -1047,7 +1212,11 @@ namespace MueLuTests {
     H.Iterate(*RHS, *X, iterations);
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchyTestBreakCondition, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, SetupHierarchyTestBreakCondition, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -1060,11 +1229,19 @@ namespace MueLuTests {
 #   endif
 
     typedef typename Teuchos::ScalarTraits<SC>::magnitudeType real_type;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     typedef typename Xpetra::MultiVector<real_type,LO,GO,NO> RealValuedMultiVector;
+#else
+    typedef typename Xpetra::MultiVector<real_type,NO> RealValuedMultiVector;
+#endif
 
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     GO nx  = 299*comm->getSize();
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
 
     Teuchos::ParameterList galeriList;
     galeriList.set("nx", nx);
@@ -1112,10 +1289,19 @@ namespace MueLuTests {
   }
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+#else
+  template <class Scalar, class Node>
+#endif
   typename Teuchos::ScalarTraits<Scalar>::magnitudeType
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   testMatrices(RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >& A,
                RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >& B,
+#else
+  testMatrices(RCP<Xpetra::Matrix<Scalar, Node> >& A,
+               RCP<Xpetra::Matrix<Scalar, Node> >& B,
+#endif
                Teuchos::FancyOStream& out,
                std::string labelA="A",
                std::string labelB="B") {
@@ -1142,8 +1328,13 @@ namespace MueLuTests {
     return norms[0];
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
   RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >
+#else
+  template <class Scalar, class Node>
+  RCP<Xpetra::Matrix<Scalar, Node> >
+#endif
   loadMatrix(const std::string& basename, Xpetra::UnderlyingLib lib, const RCP<const Teuchos::Comm<int> >& comm)
   {
 #   include <MueLu_UseShortNames.hpp>
@@ -1155,37 +1346,61 @@ namespace MueLuTests {
       infile = "rowmap_" + basename + ".m";
       std::ifstream ifile(infile);
       if (ifile)
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         rowMap = Xpetra::IO<Scalar,LocalOrdinal,GlobalOrdinal,Node>::ReadMap(infile, lib, comm);
+#else
+        rowMap = Xpetra::IO<Scalar,Node>::ReadMap(infile, lib, comm);
+#endif
     }
 
     {
       infile = "colmap_" + basename + ".m";
       std::ifstream ifile(infile);
       if (ifile)
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         colMap = Xpetra::IO<Scalar,LocalOrdinal,GlobalOrdinal,Node>::ReadMap(infile, lib, comm);
+#else
+        colMap = Xpetra::IO<Scalar,Node>::ReadMap(infile, lib, comm);
+#endif
     }
 
     {
       infile = "domainmap_" + basename + ".m";
       std::ifstream ifile(infile);
       if (ifile)
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         domMap = Xpetra::IO<Scalar,LocalOrdinal,GlobalOrdinal,Node>::ReadMap(infile, lib, comm);
+#else
+        domMap = Xpetra::IO<Scalar,Node>::ReadMap(infile, lib, comm);
+#endif
     }
 
     {
       infile = "rangemap_" + basename + ".m";
       std::ifstream ifile(infile);
       if (ifile)
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
         ranMap = Xpetra::IO<Scalar,LocalOrdinal,GlobalOrdinal,Node>::ReadMap(infile, lib, comm);
+#else
+        ranMap = Xpetra::IO<Scalar,Node>::ReadMap(infile, lib, comm);
+#endif
     }
 
     infile = basename + ".m";
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = Xpetra::IO<Scalar,LocalOrdinal,GlobalOrdinal,Node>::Read(infile, rowMap, colMap, domMap, ranMap);
+#else
+    RCP<Matrix> A = Xpetra::IO<Scalar,Node>::Read(infile, rowMap, colMap, domMap, ranMap);
+#endif
 
     return A;
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, Write, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, Write, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -1195,11 +1410,19 @@ namespace MueLuTests {
     using magnitude_type        = typename Teuchos::ScalarTraits<Scalar>::magnitudeType;
     using TMT                   = Teuchos::ScalarTraits<magnitude_type>;
     using real_type             = typename Teuchos::ScalarTraits<SC>::coordinateType;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     using RealValuedMultiVector = Xpetra::MultiVector<real_type,LO,GO,NO>;
+#else
+    using RealValuedMultiVector = Xpetra::MultiVector<real_type,NO>;
+#endif
 
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
     GO nx = 30;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
 
     Teuchos::ParameterList galeriList;
     galeriList.set("nx", nx);
@@ -1250,7 +1473,11 @@ namespace MueLuTests {
 
     {
       std::string basename = "A_0" + tname;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       RCP<Matrix> A0in = loadMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>(basename, lib, comm);
+#else
+      RCP<Matrix> A0in = loadMatrix<Scalar,Node>(basename, lib, comm);
+#endif
 
       infile = "colmap_" + basename + ".m";    remove(infile.c_str());
       infile = "domainmap_" + basename + ".m"; remove(infile.c_str());
@@ -1268,7 +1495,11 @@ namespace MueLuTests {
       RCP<Matrix> A1m = rcp_dynamic_cast<Matrix>(A1, true);
 
       std::string basename = "A_1" + tname;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       RCP<Matrix> A1in = loadMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>(basename, lib, A1m->getRangeMap()->getComm());
+#else
+      RCP<Matrix> A1in = loadMatrix<Scalar,Node>(basename, lib, A1m->getRangeMap()->getComm());
+#endif
 
       infile = "colmap_" + basename + ".m";    remove(infile.c_str());
       infile = "domainmap_" + basename + ".m"; remove(infile.c_str());
@@ -1286,7 +1517,11 @@ namespace MueLuTests {
       RCP<Matrix> P1m = rcp_dynamic_cast<Matrix>(P1, true);
 
       std::string basename = "P_1" + tname;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       RCP<Matrix> P1in = loadMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>(basename, lib, P1m->getRangeMap()->getComm());
+#else
+      RCP<Matrix> P1in = loadMatrix<Scalar,Node>(basename, lib, P1m->getRangeMap()->getComm());
+#endif
 
       infile = "colmap_" + basename + ".m";    remove(infile.c_str());
       infile = "domainmap_" + basename + ".m"; remove(infile.c_str());
@@ -1304,7 +1539,11 @@ namespace MueLuTests {
       RCP<Matrix> R1m = rcp_dynamic_cast<Matrix>(R1, true);
 
       std::string basename = "R_1" + tname;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
       RCP<Matrix> R1in = loadMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>(basename, lib, R1m->getRangeMap()->getComm());
+#else
+      RCP<Matrix> R1in = loadMatrix<Scalar,Node>(basename, lib, R1m->getRangeMap()->getComm());
+#endif
 
       infile = "colmap_" + basename + ".m";    remove(infile.c_str());
       infile = "domainmap_" + basename + ".m"; remove(infile.c_str());
@@ -1320,7 +1559,11 @@ namespace MueLuTests {
 
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, BlockCrs, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, BlockCrs, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -1328,7 +1571,11 @@ namespace MueLuTests {
     MUELU_TEST_ONLY_FOR(Xpetra::UseTpetra);
 
     typedef typename Teuchos::ScalarTraits<SC>::magnitudeType real_type;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     typedef typename Xpetra::MultiVector<real_type,LO,GO,NO> RealValuedMultiVector;
+#else
+    typedef typename Xpetra::MultiVector<real_type,NO> RealValuedMultiVector;
+#endif
 
     out << "===== Generating matrices =====" << std::endl;
     RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
@@ -1338,7 +1585,11 @@ namespace MueLuTests {
     matrixList.set("matrixType",  "Laplace2D");
 
     // Construct block matrix
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TpetraTestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::BuildBlockMatrix(matrixList,Xpetra::UseTpetra);
+#else
+    RCP<Matrix> A = TestHelpers::TpetraTestFactory<Scalar, Node>::BuildBlockMatrix(matrixList,Xpetra::UseTpetra);
+#endif
     if(A==Teuchos::null) { // if A is Teuchos::null, we could not build the matrix as it is not instantiated in Tpetra
       out << "Skipping test" << std::endl;
       return;
@@ -1353,7 +1604,11 @@ namespace MueLuTests {
     // Construct our own point operators for level 1
     matrixList.set("nx", matrixList.get<GO>("nx")*3);
     matrixList.set("ny", matrixList.get<GO>("ny"));
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A_point = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::BuildMatrix(matrixList, lib);;
+#else
+    RCP<Matrix> A_point = TestHelpers::TestFactory<Scalar, Node>::BuildMatrix(matrixList, lib);;
+#endif
 
     out << "===== Setting up helper hierarchy =====" << std::endl;
 
@@ -1437,7 +1692,11 @@ namespace MueLuTests {
     TEST_EQUALITY(0,0);
   }
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, CheckNullspaceDimension, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Hierarchy, CheckNullspaceDimension, Scalar, Node)
+#endif
   {
     // Test that HierarchyManager throws if user-supplied nullspace has dimension smaller than numPDEs
 #   include <MueLu_UseShortNames.hpp>
@@ -1445,7 +1704,11 @@ namespace MueLuTests {
     MUELU_TESTING_LIMIT_SCOPE(Scalar,GlobalOrdinal,Node);
 
     GO nx = 30;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
     RCP<Matrix> A = TestHelpers::TestFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build1DPoisson(nx);
+#else
+    RCP<Matrix> A = TestHelpers::TestFactory<Scalar, Node>::Build1DPoisson(nx);
+#endif
     A->SetFixedBlockSize(2);
 
     HierarchyManager mueluManager;
@@ -1463,6 +1726,7 @@ namespace MueLuTests {
   }
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
 # define MUELU_ETI_GROUP(Scalar, LO, GO, Node) \
     TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, Constructor, Scalar, LO, GO, Node) \
     TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, DescriptionCaching, Scalar, LO, GO, Node) \
@@ -1481,6 +1745,26 @@ namespace MueLuTests {
     TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, Write, Scalar, LO, GO, Node) \
     TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, BlockCrs, Scalar, LO, GO, Node) \
     TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, CheckNullspaceDimension, Scalar, LO, GO, Node)
+#else
+# define MUELU_ETI_GROUP(Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, Constructor, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, DescriptionCaching, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, SetAndGetLevel, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, GetNumLevels, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, KeepAggregates, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, Iterate, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, IterateWithImplicitRestriction, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, SetupHierarchy1level, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, SetupHierarchy1levelv2, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, SetupHierarchy2level, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, SetupHierarchy3level, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, SetupHierarchy3level_NoPreSmooth, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, SetupHierarchy3levelFacManagers, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, SetupHierarchyTestBreakCondition, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, Write, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, BlockCrs, Scalar, Node) \
+    TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(Hierarchy, CheckNullspaceDimension, Scalar, Node)
+#endif
 
 # include <MueLu_ETI_4arg.hpp>
 

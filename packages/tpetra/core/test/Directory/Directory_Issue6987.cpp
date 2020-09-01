@@ -54,7 +54,11 @@ namespace {
 
 using Tpetra::TestingUtilities::getDefaultComm;
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
 TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Directory, AllMinGIDs, SC, LO, GO)
+#else
+TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Directory, AllMinGIDs, SC)
+#endif
 {
   /*
    * This issue is described in
@@ -79,7 +83,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Directory, AllMinGIDs, SC, LO, GO)
    */
 
   using map_type = Tpetra::Map<LO, GO>;
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   using vector_type = Tpetra::MultiVector<SC, LO, GO>;
+#else
+  using vector_type = Tpetra::MultiVector<SC>;
+#endif
   using import_type = Tpetra::Import<LO, GO>;
 
   auto comm = getDefaultComm();
@@ -145,7 +153,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Directory, AllMinGIDs, SC, LO, GO)
 //
 
 #define THIS_TEST_GROUP(SC, LO, GO) \
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT(Directory, AllMinGIDs, SC, LO, GO)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT(Directory, AllMinGIDs, SC)
+#endif
 
 TPETRA_ETI_MANGLING_TYPEDEFS()
 TPETRA_INSTANTIATE_SLG(THIS_TEST_GROUP)

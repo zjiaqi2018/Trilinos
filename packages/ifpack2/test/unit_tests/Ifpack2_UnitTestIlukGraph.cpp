@@ -71,7 +71,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL(Ifpack2IlukGraph, IlukGraphTest0, LocalOrdinal
 //that method has these input arguments:
 //Teuchos::FancyOStream& out, bool& success
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   typedef Tpetra::CrsGraph<LocalOrdinal,GlobalOrdinal,Node> crs_graph_type;
+#else
+  typedef Tpetra::CrsGraph<Node> crs_graph_type;
+#endif
   typedef typename crs_graph_type::local_graph_type local_graph_type;
   typedef typename local_graph_type::row_map_type lno_row_view_t;
   typedef typename local_graph_type::entries_type lno_nonzero_view_t;
@@ -87,8 +91,13 @@ TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL(Ifpack2IlukGraph, IlukGraphTest0, LocalOrdinal
 
   global_size_t num_rows_per_proc = 5;
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   Teuchos::RCP<const Tpetra::CrsGraph<LocalOrdinal,GlobalOrdinal,Node> > crsgraph =
     tif_utest::create_tridiag_graph<LocalOrdinal,GlobalOrdinal,Node> (num_rows_per_proc);
+#else
+  Teuchos::RCP<const Tpetra::CrsGraph<Node> > crsgraph =
+    tif_utest::create_tridiag_graph<Node> (num_rows_per_proc);
+#endif
 
   int num_procs = crsgraph->getRowMap()->getComm()->getSize();
   TEST_EQUALITY( crsgraph->getRowMap()->getNodeNumElements(), num_rows_per_proc)

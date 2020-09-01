@@ -56,7 +56,11 @@ namespace MueLuTests {
   // this namespace already has:  #include "MueLu_UseShortNames.hpp"
   using namespace TestHelpers::Smoothers;
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(BelosSmoother, NotSetup, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(BelosSmoother, NotSetup, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -71,7 +75,11 @@ namespace MueLuTests {
   }
 
   // Tests interface to Belos's Gauss-Seidel preconditioner.
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
   TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(BelosSmoother, HardCodedResult_BlockCG, Scalar, LocalOrdinal, GlobalOrdinal, Node)
+#else
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(BelosSmoother, HardCodedResult_BlockCG, Scalar, Node)
+#endif
   {
 #   include <MueLu_UseShortNames.hpp>
     MUELU_TESTING_SET_OSTREAM;
@@ -93,9 +101,15 @@ namespace MueLuTests {
   } // Block CG
 
 
+#ifdef TPETRA_ENABLE_TEMPLATE_ORDINALS
 #define MUELU_ETI_GROUP(SC,LO,GO,NO) \
   TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(BelosSmoother,NotSetup,SC,LO,GO,NO) \
   TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(BelosSmoother,HardCodedResult_BlockCG,SC,LO,GO,NO) \
+#else
+#define MUELU_ETI_GROUP(SC,NO) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(BelosSmoother,NotSetup,SC,NO) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_4_INSTANT(BelosSmoother,HardCodedResult_BlockCG,SC,NO) \
+#endif
 
 #include <MueLu_ETI_4arg.hpp>
 
