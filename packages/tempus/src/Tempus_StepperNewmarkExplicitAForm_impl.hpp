@@ -11,6 +11,7 @@
 
 #include "Teuchos_VerboseObjectParameterListHelpers.hpp"
 #include "Thyra_VectorStdOps.hpp"
+#include "Tempus_StepperNewmarkExplicitAFormModifierDefault.hpp"
 
 //#define DEBUG_OUTPUT
 
@@ -70,6 +71,7 @@ StepperNewmarkExplicitAForm<Scalar>::StepperNewmarkExplicitAForm()
 }
 
 
+#ifndef TEMPUS_HIDE_DEPRECATED_CODE
 template<class Scalar>
 StepperNewmarkExplicitAForm<Scalar>::StepperNewmarkExplicitAForm(
   const Teuchos::RCP<const Thyra::ModelEvaluator<Scalar> >& appModel,
@@ -95,7 +97,32 @@ StepperNewmarkExplicitAForm<Scalar>::StepperNewmarkExplicitAForm(
     this->initialize();
   }
 }
+#endif
 
+template<class Scalar>
+StepperNewmarkExplicitAForm<Scalar>::StepperNewmarkExplicitAForm(
+  const Teuchos::RCP<const Thyra::ModelEvaluator<Scalar> >& appModel,
+  bool useFSAL,
+  std::string ICConsistency,
+  bool ICConsistencyCheck,
+  Scalar gamma,
+  const Teuchos::RCP<StepperNewmarkExplicitAFormAppAction<Scalar> >& stepperAppAction)
+  : gammaDefault_(Scalar(0.5)), gamma_(Scalar(0.5))
+{
+  this->setStepperType(        "Newmark Explicit a-Form");
+  this->setUseFSAL(            useFSAL);
+  this->setICConsistency(      ICConsistency);
+  this->setICConsistencyCheck( ICConsistencyCheck);
+
+  this->setAppAction(stepperAppAction);
+  setGamma(gamma);
+
+  if (appModel != Teuchos::null) {
+
+    this->setModel(appModel);
+    this->initialize();
+  }
+}
 
 template<class Scalar>
 void StepperNewmarkExplicitAForm<Scalar>::setInitialConditions(
@@ -245,6 +272,10 @@ void StepperNewmarkExplicitAForm<Scalar>::takeStep(
       "Try setting in \"Solution History\" \"Storage Type\" = \"Undo\"\n"
       "  or \"Storage Type\" = \"Static\" and \"Storage Limit\" = \"2\"\n");
 
+    auto thisStepper = Teuchos::rcpFromRef(*this);
+    stepperNewmarkExpAppAction_->execute(solutionHistory, thisStepper,
+        StepperNewmarkExplicitAFormAppAction<Scalar>::ACTION_LOCATION::BEGIN_STEP);
+
     RCP<SolutionState<Scalar> > currentState=solutionHistory->getCurrentState();
     RCP<SolutionState<Scalar> > workingState=solutionHistory->getWorkingState();
 
@@ -276,6 +307,12 @@ void StepperNewmarkExplicitAForm<Scalar>::takeStep(
     predictDisplacement(*d_new, *d_old, *v_old, *a_old, dt);
     predictVelocity(*v_new, *v_old, *a_old, dt);
 
+    stepperNewmarkExpAppAction_->execute(solutionHistory, thisStepper,
+        StepperNewmarkExplicitAFormAppAction<Scalar>::ACTION_LOCATION::BEFORE_SOLVE);
+
+    stepperNewmarkExpAppAction_->execute(solutionHistory, thisStepper,
+        StepperNewmarkExplicitAFormAppAction<Scalar>::ACTION_LOCATION::AFTER_SOLVE);
+
     // Evaluate xDotDot = f(x, xDot, t).
     this->evaluateExplicitODE(a_new, d_new, v_new, time_old, p);
 
@@ -298,6 +335,9 @@ void StepperNewmarkExplicitAForm<Scalar>::takeStep(
     workingState->setSolutionStatus(Status::PASSED);
     workingState->setOrder(this->getOrder());
     workingState->computeNorms(currentState);
+
+    stepperNewmarkExpAppAction_->execute(solutionHistory, thisStepper,
+        StepperNewmarkExplicitAFormAppAction<Scalar>::ACTION_LOCATION::END_STEP);
   }
   return;
 }
@@ -361,6 +401,21 @@ StepperNewmarkExplicitAForm<Scalar>::getValidParameters() const
   return pl;
 }
 
+template<class Scalar>                                                          
+void StepperNewmarkExplicitAForm<Scalar>::setAppAction(                                                                                                                                                                                                                                                                                                                           
+    Teuchos::RCP<StepperNewmarkExplicitAFormAppAction<Scalar> > appAction)               
+{                                                                               
+
+  if (appAction == Teuchos::null) {                                             
+    // Create default appAction                                                 
+    stepperNewmarkExpAppAction_ =                                                       
+	Teuchos::rcp(new StepperNewmarkExplicitAFormModifierDefault<Scalar>());          
+  } else {                                                                      
+    stepperNewmarkExpAppAction_ = appAction;                                            
+  }                                                                             
+
+  this->isInitialized_ = false;                                                 
+} 
 
 } // namespace Tempus
 #endif // Tempus_StepperNewmarkExplicitAForm_impl_hpp
